@@ -1,6 +1,6 @@
 [project]
 name = "edit2docs"
-version = "0.14.0"
+version = "0.14.1"
 description = "AI-agent-native document engine: generate and chat-edit DOCX, XLSX and PPTX as a Python library, agent tool set, MCP server or hosted service. English-first with first-class Korean support. Sister project of edit2ppt."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -55,7 +55,11 @@ dependencies = [
     # LLM
     "anthropic>=0.40.0",
     # MCP (Model Context Protocol) — powers the zero-infra `edit2docs-mcp`
-    "mcp>=1.0.0",
+    # and the hosted MCP-over-HTTP transport. Capped below 2.0: the 2.0
+    # major dropped the `mcp.server.fastmcp` module our server imports, so
+    # an uncapped floor silently resolves the breaking release and the
+    # server crash-loops on `ModuleNotFoundError: mcp.server.fastmcp`.
+    "mcp>=1.0.0,<2.0.0",
     # Native raster layer (docs/native-render-plan.md M1) — both are
     # self-contained wheels: resvg for SVG->PNG, fontTools for metrics.
     "resvg-py>=0.3.3",

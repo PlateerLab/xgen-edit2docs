@@ -330,6 +330,8 @@ uv venv .venv && uv pip install -e ".[server,dev]"
 
 | version | highlights |
 |---|---|
+| **v0.14.1** | dependency fix — cap `mcp < 2.0` (the 2.0 major dropped `mcp.server.fastmcp`; an uncapped floor crash-looped the hosted server) |
+| v0.10–0.14 | **`build_doc`** (deterministic generation, no LLM) · **`read_doc_xml`/`set_doc_xml`** (direct OOXML editing, create/delete parts) · agent surface consolidated to **8 verbs** · **hierarchical `doc_guide`** (progressive-disclosure skill map) · **themed decks** (deterministic design in one `build_doc` call) |
 | **v0.9.0** | **token optimization** — prompt-cache restructuring (edit retries read the cached prefix ~10× cheaper; per-page executor spec_lock cached once, not re-sent), fan-out cache warm-up, unbounded-input caps (strategist sources, edit outline windowing), retry-severity tiering, per-role model tiering, streaming, honest cache accounting + per-stage cost |
 | v0.8.0 | **lossless editing** on [contextifier](https://github.com/CocoRoF/Contextifier)'s raw OOXML layer — set_doc_text/edit_doc no longer destroy charts, images, sparklines, styles or cached formulas; PPTX chat-edit preserves native charts/tables; new **`edit_chart`** verb (data + title, embedded workbook synced) |
 | v0.7.0 | upstream sync (ppt-master v2.7 → v3.1, 3 waves): **native chart/table export**, paragraph-merge editability, PowerPoint repair-prompt fixes, checker hardening · **English-first flip** with full Korean support |

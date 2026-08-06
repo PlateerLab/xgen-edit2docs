@@ -101,8 +101,8 @@ class TestAgentTools:
     def test_schemas_are_anthropic_shaped(self):
         assert TOOL_NAMES == [
             "doc_guide", "analyze_doc", "render_doc", "set_doc_text",
-            "read_doc_xml", "set_doc_xml", "build_doc", "generate_doc",
-            "edit_doc",
+            "arrange_doc", "read_doc_xml", "set_doc_xml", "build_doc",
+            "generate_doc", "edit_doc",
         ]
         for tool in ANTHROPIC_TOOLS:
             assert set(tool) == {"name", "description", "input_schema"}
@@ -170,8 +170,8 @@ class TestDocGuide:
 
     def test_parent_prefix_joins_children(self):
         res = run_tool("doc_guide", {"topic": "recipes"})
-        assert "ADD A SLIDE" in res["guide"]
-        assert "RECOLOR" in res["guide"]
+        assert "COPY / MOVE / DELETE a slide" in res["guide"]  # recipes.slides
+        assert "RECOLOR" in res["guide"]  # recipes.colors
 
     def test_exact_topic_lists_subtopics(self):
         res = run_tool("doc_guide", {"topic": "edit"})

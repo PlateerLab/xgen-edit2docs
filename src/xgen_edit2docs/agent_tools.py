@@ -128,6 +128,35 @@ ANTHROPIC_TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "arrange_doc",
+        "description": (
+            "Deterministic STRUCTURAL edits: duplicate / move / delete whole "
+            "slides (.pptx) or sheets (.xlsx); rename sheets. No key; byte-"
+            "preserving. ops apply in order — target = slide index or sheet "
+            "name/index, to = position. Guide: doc_guide('arrange')."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "doc": _DOC_PATH,
+                "ops": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": (
+                        "Structural ops, e.g. {op:'duplicate',target:0,to:3} "
+                        "or {op:'rename',target:'Sheet1',name:'Summary'}. "
+                        "Shapes: doc_guide('arrange')."
+                    ),
+                },
+                "output": {
+                    "type": "string",
+                    "description": "Output path (default: <input>_arranged.<ext>).",
+                },
+            },
+            "required": ["doc", "ops"],
+        },
+    },
+    {
         "name": "read_doc_xml",
         "description": (
             "Documents are zips of XML. No part: the part map. With part: "
@@ -422,6 +451,16 @@ async def run_tool_async(
             "path": str(result.path),
             "applied": result.applied,
             "results": result.results,
+        }
+    if name == "arrange_doc":
+        result = simple.arrange_doc(
+            args["doc"], args["ops"], output=args.get("output")
+        )
+        return {
+            "path": str(result.path),
+            "applied": result.applied,
+            "results": result.results,
+            "warnings": result.warnings,
         }
     if name == "build_doc":
         result = simple.build_doc(

@@ -121,6 +121,18 @@ def build_local_mcp_server() -> FastMCP:
     async def analyze_doc_tool(doc: str) -> dict[str, Any]:
         return simple.analyze_doc(doc)
 
+    @mcp.tool(name="arrange_doc", description=_DESC["arrange_doc"])
+    async def arrange_doc_tool(
+        doc: str,
+        ops: list[dict],
+        output: str | None = None,
+    ) -> dict[str, Any]:
+        from ..agent_tools import run_tool_async
+
+        return await run_tool_async(
+            "arrange_doc", {"doc": doc, "ops": ops, "output": output}
+        )
+
     @mcp.tool(name="build_doc", description=_DESC["build_doc"])
     async def build_doc_tool(
         spec: str | dict[str, Any],

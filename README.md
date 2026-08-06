@@ -330,6 +330,8 @@ uv venv .venv && uv pip install -e ".[server,dev]"
 
 | version | highlights |
 |---|---|
+| **v0.15.1** | ships the full **`arrange_doc`** implementation (0.15.0 tagged only the version bump — the verb, engine and wiring were left out; use 0.15.1) |
+| v0.15.0 | **`arrange_doc`** — deterministic STRUCTURAL edits: duplicate / move / delete whole slides (.pptx) and sheets (.xlsx), rename sheets. No key, byte-preserving (a copy adds parts; untouched slides/sheets stay byte-identical). On [xgen_contextifier](https://github.com/CocoRoF/Contextifier) 0.5.0's new raw primitives. 9th agent verb + `doc_guide('arrange')` _(incomplete on PyPI — superseded by 0.15.1)_ |
 | **v0.14.1** | dependency fix — cap `mcp < 2.0` (the 2.0 major dropped `mcp.server.fastmcp`; an uncapped floor crash-looped the hosted server) |
 | v0.10–0.14 | **`build_doc`** (deterministic generation, no LLM) · **`read_doc_xml`/`set_doc_xml`** (direct OOXML editing, create/delete parts) · agent surface consolidated to **8 verbs** · **hierarchical `doc_guide`** (progressive-disclosure skill map) · **themed decks** (deterministic design in one `build_doc` call) |
 | **v0.9.0** | **token optimization** — prompt-cache restructuring (edit retries read the cached prefix ~10× cheaper; per-page executor spec_lock cached once, not re-sent), fan-out cache warm-up, unbounded-input caps (strategist sources, edit outline windowing), retry-severity tiering, per-role model tiering, streaming, honest cache accounting + per-stage cost |

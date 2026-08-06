@@ -28,6 +28,7 @@ CANONICAL_TOOL_NAMES = [
     "analyze_doc",
     "render_doc",
     "set_doc_text",
+    "arrange_doc",
     "read_doc_xml",
     "set_doc_xml",
     "build_doc",
@@ -51,17 +52,19 @@ GENERATE (new file)
 EDIT (existing file) — run analyze_doc FIRST (addresses + charts list)
   set_doc_text  [det]  text/table/cell values + chart title/data
                                                                → topic: edit.text, edit.chart
+  arrange_doc   [det]  duplicate/move/delete whole slides & sheets;
+                       rename sheets — structure, not content  → topic: arrange
   read_doc_xml  [det]  part map, or one part's exact XML       → topic: edit.xml
   set_doc_xml   [det]  patch/create/delete a part's XML — colors, fonts,
-                       geometry, add/remove slides, anything   → topic: edit.xml, recipes
+                       geometry, raw XML, anything             → topic: edit.xml, recipes
   edit_doc      [LLM]  one natural-language edit turn          → topic: edit
 
 INSPECT (either family)
   analyze_doc   [det]  outline + edit addresses + charts list
   render_doc    [det]  to=md|svg|png|pdf (md = read the content) → topic: render
 
-topics: build · generate · edit · edit.text · edit.chart · edit.xml · render ·
-recipes.slides · recipes.colors"""
+topics: build · generate · edit · edit.text · edit.chart · arrange · edit.xml ·
+render · recipes.slides · recipes.colors"""
 
 GUIDES: dict[str, str] = {
     # ── GENERATE family ────────────────────────────────────────────────
@@ -144,6 +147,33 @@ analyze_doc's "charts" list) routes to the chart engine:
 Setting data rewrites the chart caches AND its embedded workbook, so Office's
 double-click-edit shows the same numbers. Same shape for docx/xlsx/pptx.
 Chart COLORS/fonts/styling are NOT here — that is XML: topic recipes.colors.""",
+    "arrange": """\
+arrange_doc(doc, ops) — STRUCTURE, not content: whole slides (.pptx) and
+sheets (.xlsx) as objects. Deterministic, no key, byte-preserving (a copy
+adds parts; untouched slides/sheets stay byte-identical). Run analyze_doc
+first for slide indices / sheet names.
+
+OPS (apply IN ORDER; each target resolves against the CURRENT state):
+  {"op":"duplicate","target":i,"to":k}  pptx: copy slide i (charts & notes
+        cloned independently, images shared) at position k (default: after i)
+  {"op":"move","target":i,"to":k}       reorder a slide/sheet to position k
+  {"op":"delete","target":i}            remove a slide/sheet (orphan-swept)
+  {"op":"duplicate","target":s,"name":"Q2 copy","to":k}   xlsx: copy a sheet
+  {"op":"rename","target":s,"name":"Summary"}             xlsx sheet tab only
+
+target = slide index (pptx, 0-based) or sheet name/index (xlsx). Each op
+returns a status: applied | invalid (bad field / wrong format) | not_found
+(no such slide/sheet) | refused (e.g. deleting the only sheet). One bad op
+never aborts the batch.
+
+SEQUENTIAL INDICES — after {"op":"delete","target":1} the later slides shift
+down by one; a following op sees the NEW numbering. To delete several
+slides, delete the HIGHEST index first, or issue separate calls.
+
+NOT arrange: new-from-scratch slides (see recipes.slides / build_doc),
+within-slide text/chart edits (set_doc_text), xlsx rename does NOT rewrite
+formulas that reference the old tab name (a warning flags when any do).
+docx has no slide/sheet structure — arrange_doc rejects it.""",
     "edit.xml": """\
 Documents ARE zips of XML — read_doc_xml + set_doc_xml express every edit
 OOXML can. Workflow:
@@ -165,7 +195,17 @@ theme1.xml, and each part's _rels/*.rels. Recipes: recipes.slides,
 recipes.colors.""",
     # ── Recipes (proven multi-call sequences) ──────────────────────────
     "recipes.slides": """\
-ADD A SLIDE — 4 tool calls (proven end-to-end):
+COPY / MOVE / DELETE a slide — use arrange_doc (one deterministic call,
+byte-preserving), NOT hand-rolled XML: see doc_guide('arrange').
+  duplicate slide 0 after slide 2:
+    arrange_doc(doc, [{"op":"duplicate","target":0,"to":3}])
+  move slide 4 to the front:
+    arrange_doc(doc, [{"op":"move","target":4,"to":0}])
+  delete slide 2:
+    arrange_doc(doc, [{"op":"delete","target":2}])
+
+ADD A *NEW* (non-duplicate) slide is still raw XML (arrange_doc copies
+existing slides; it does not synthesize new ones):
 1. xml  = read_doc_xml(doc, "ppt/slides/slide1.xml")   # template; edit texts
    rels = read_doc_xml(doc, "ppt/slides/_rels/slide1.xml.rels")
 2. set_doc_xml(doc, "ppt/slides/slide2.xml", xml=xml, content_type=
@@ -178,10 +218,7 @@ ADD A SLIDE — 4 tool calls (proven end-to-end):
    set_doc_xml(doc, "ppt/presentation.xml", edits=[{"find": "</p:sldIdLst>",
      "replace": "<p:sldId id=\\"9999\\" r:id=\\"rIdNew\\"/></p:sldIdLst>"}])
    (sldId id: any unused number ≥ 256; rIds must be unique in their rels file)
-
-REMOVE A SLIDE: set_doc_xml(delete=true) on slideN.xml and its .rels, then
-remove its <p:sldId/> from presentation.xml and its <Relationship/> from
-ppt/_rels/presentation.xml.rels via find/replace edits.""",
+— or just duplicate an existing slide with arrange_doc and edit its text.""",
     "recipes.colors": """\
 RECOLOR A CHART SERIES (proven end-to-end):
 1. read_doc_xml(doc, "ppt/charts/chart1.xml")

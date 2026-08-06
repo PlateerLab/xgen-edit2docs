@@ -90,6 +90,16 @@ class TextEditsResult:
 
 
 @dataclass
+class ArrangeResult:
+    """Output of :func:`arrange_doc` — structural (slide/sheet) edits."""
+
+    path: Path
+    applied: int
+    results: list[dict] = field(default_factory=list)
+    warnings: list[dict] = field(default_factory=list)
+
+
+@dataclass
 class RenderResult:
     """Output of :func:`render_doc` — files written to disk."""
 
@@ -888,6 +898,43 @@ def set_doc_xml(
     else:
         out = Path(doc)
     return TextEditsResult(path=out, applied=applied, results=dumped)
+
+
+def arrange_doc(
+    doc: str | Path,
+    ops: list[dict],
+    *,
+    output: str | Path | None = None,
+) -> ArrangeResult:
+    """Deterministic STRUCTURAL edits — whole slides/sheets as objects.
+    No LLM, no key; byte-preserving (untouched parts stay byte-identical).
+
+    ``ops`` apply in sequence, each resolving ``target`` against the
+    CURRENT state (after prior ops):
+
+    * ``{"op":"duplicate","target":i,"to":k}`` — pptx: copy slide ``i``
+      (charts/notes cloned, images shared) at position ``k`` (default:
+      after ``i``). xlsx: needs ``"name"`` for the new sheet.
+    * ``{"op":"move","target":i,"to":k}`` — reorder a slide/sheet.
+    * ``{"op":"delete","target":i}`` — remove a slide/sheet (orphan-swept).
+    * ``{"op":"rename","target":s,"name":"New"}`` — xlsx sheet only.
+
+    ``target`` is a slide index (pptx) or a sheet name/index (xlsx). The
+    batch is best-effort: each op gets a ``status`` (applied / invalid /
+    not_found / refused); one bad op never aborts the rest."""
+    from .documents.arrange import apply_arrange
+
+    fmt = _fmt_of(doc)
+    content = _read_pptx(doc)
+    new_content, results, warnings = apply_arrange(content, fmt, list(ops))
+    applied = sum(1 for r in results if r["status"] == "applied")
+    out = Path(output) if output is not None else _default_output(doc, "_arranged")
+    if applied > 0:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(new_content)
+    else:
+        out = Path(doc)
+    return ArrangeResult(path=out, applied=applied, results=results, warnings=warnings)
 
 
 def build_doc(

@@ -227,8 +227,8 @@ class TestUnifiedFacade:
 
         assert TOOL_NAMES == [
             "doc_guide", "analyze_doc", "render_doc", "set_doc_text",
-            "read_doc_xml", "set_doc_xml", "build_doc", "generate_doc",
-            "edit_doc",
+            "arrange_doc", "read_doc_xml", "set_doc_xml", "build_doc",
+            "generate_doc", "edit_doc",
         ]
         docx_path = tmp_path / "r.docx"
         docx_path.write_bytes(docx_from_markdown(DOC_MD))

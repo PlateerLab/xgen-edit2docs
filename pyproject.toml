@@ -1,6 +1,6 @@
 [project]
 name = "xgen-edit2docs"
-version = "0.16.0"
+version = "0.16.1"
 description = "AI-agent-native document engine: generate and chat-edit DOCX, XLSX and PPTX as a Python library, agent tool set, MCP server or hosted service. English-first with first-class Korean support. Sister project of edit2ppt."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -38,7 +38,7 @@ dependencies = [
     # edits and PPTX native-content preservation that keep charts,
     # sparklines, custom XML, cached formula values and native
     # charts/tables byte-identical through an edit.
-    "xgen-contextifier>=0.6.0",
+    "xgen-contextifier>=0.7.0",
     # Native chart export (data-pptx-native markers) generates the chart's
     # embedded XLSX workbook with XlsxWriter (upstream 53c6cad5).
     "XlsxWriter>=3.0",

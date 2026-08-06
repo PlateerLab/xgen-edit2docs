@@ -1,0 +1,33 @@
+name: CI — xgen-edit2docs
+
+# 이 저장소에는 테스트 게이트가 없었다 (publish 계열 워크플로만 있었다).
+# 12,000 파일짜리 패키지가 검증 없이 배포돼 온 셈이라 여기서 만든다.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # 내부 의존(xgen-contextifier)은 pyproject 에 URL 직접참조로 박혀 있어
+      # 별도 인덱스 설정 없이 그대로 해석된다 — 우리 패키지는 PyPI 에 없다.
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Test
+        run: pytest tests/ -q --tb=short

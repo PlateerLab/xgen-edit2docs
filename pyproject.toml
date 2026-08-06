@@ -38,7 +38,10 @@ dependencies = [
     # edits and PPTX native-content preservation that keep charts,
     # sparklines, custom XML, cached formula values and native
     # charts/tables byte-identical through an edit.
-    "xgen-contextifier>=0.8.0",
+    # ⚠ 내부 패키지는 **URL 직접참조**로 고정한다. 우리 패키지는 어느 인덱스에도
+    # 없으므로 이름으로만 요구하면 `pip install -e .` 이 해석에 실패한다 —
+    # 실제로 이 저장소는 개발 설치조차 되지 않는 상태였다.
+    "xgen-contextifier @ https://github.com/PlateerLab/xgen-contextifier/releases/download/v0.9.0/xgen_contextifier-0.9.0-py3-none-any.whl",
     # Native chart export (data-pptx-native markers) generates the chart's
     # embedded XLSX workbook with XlsxWriter (upstream 53c6cad5).
     "XlsxWriter>=3.0",
@@ -119,6 +122,12 @@ xgen_edit2docs-mcp = "xgen_edit2docs.mcp.local_main:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+# 내부 패키지를 URL 직접참조로 고정하므로 hatchling 에 명시적으로 허용을 준다.
+# (기본은 금지 — PyPI 업로드 시 직접참조가 거부되기 때문인데, 우리는 PyPI 에
+#  올리지 않고 GitHub Release wheel 로 배포한다.)
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/xgen_edit2docs"]

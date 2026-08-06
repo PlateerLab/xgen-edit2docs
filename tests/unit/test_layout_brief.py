@@ -14,7 +14,7 @@ import re
 
 import pytest
 
-from edit2docs.tools._layout_brief import (
+from xgen_edit2docs.tools._layout_brief import (
     PageLayoutBrief,
     Zone,
     build_layout_briefs,
@@ -183,7 +183,7 @@ def test_user_message_carries_brief_first():
     So we assert the brief precedes page content and spec_lock is absent
     from the user message but present in the suffix.
     """
-    from edit2docs.tools.execute import (
+    from xgen_edit2docs.tools.execute import (
         _build_spec_lock_suffix,
         _build_user_message,
         ExecutePageRequest,
@@ -210,7 +210,7 @@ def test_user_message_carries_brief_first():
 def test_user_message_without_brief_unchanged():
     """Legacy requests (no brief) get the previous message shape, minus
     the spec_lock block (now delivered via the cached system suffix)."""
-    from edit2docs.tools.execute import _build_user_message, ExecutePageRequest
+    from xgen_edit2docs.tools.execute import _build_user_message, ExecutePageRequest
 
     msg = _build_user_message(
         ExecutePageRequest(

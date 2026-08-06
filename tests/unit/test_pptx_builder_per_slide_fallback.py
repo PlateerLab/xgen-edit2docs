@@ -20,7 +20,7 @@ from __future__ import annotations
 from pathlib import Path
 import zipfile
 
-from edit2docs.core.svg_to_pptx.pptx_builder import (
+from xgen_edit2docs.core.svg_to_pptx.pptx_builder import (
     _placeholder_slide_xml,
     create_pptx_with_native_svg,
 )

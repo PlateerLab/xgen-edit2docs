@@ -17,8 +17,8 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from edit2docs.db.models import Base, Job, JobEventType, JobKind, JobStatus, Tenant
-from edit2docs.services.jobs import (
+from xgen_edit2docs.db.models import Base, Job, JobEventType, JobKind, JobStatus, Tenant
+from xgen_edit2docs.services.jobs import (
     FakeJobBus,
     JobEventEnvelope,
     JobNotFound,
@@ -27,8 +27,8 @@ from edit2docs.services.jobs import (
     list_past_events,
     record_event,
 )
-from edit2docs.workers.executors.noop import convert_noop
-from edit2docs.workers.executors.registry import ExecutionContext
+from xgen_edit2docs.workers.executors.noop import convert_noop
+from xgen_edit2docs.workers.executors.registry import ExecutionContext
 
 
 @pytest_asyncio.fixture

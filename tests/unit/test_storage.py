@@ -11,7 +11,7 @@ import urllib.parse
 
 import pytest
 
-from edit2docs.storage import (
+from xgen_edit2docs.storage import (
     InMemoryStorage,
     PresignedUrl,
     assert_ascii_key,

@@ -27,11 +27,11 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from edit2docs.db.models import Base
-from edit2docs.llm.anthropic_client import LLMResult, LLMUsage
-from edit2docs.mcp import build_mcp_server
-from edit2docs.mcp.context import MCPContext
-from edit2docs.storage import InMemoryStorage
+from xgen_edit2docs.db.models import Base
+from xgen_edit2docs.llm.anthropic_client import LLMResult, LLMUsage
+from xgen_edit2docs.mcp import build_mcp_server
+from xgen_edit2docs.mcp.context import MCPContext
+from xgen_edit2docs.storage import InMemoryStorage
 
 KOREAN_SVG = (Path(__file__).resolve().parents[1] / "fixtures" / "korean_slide.svg").read_text(
     encoding="utf-8"
@@ -113,8 +113,8 @@ class TestKoreanPipelineEndToEnd:
 
         # 2. Stub convert (avoid pulling in mammoth / PyMuPDF), and inject our
         # capturing LLM into both the strategize and execute_batch call paths.
-        import edit2docs.tools.convert as convert_module
-        from edit2docs.tools import ConvertResponse, CostBreakdown
+        import xgen_edit2docs.tools.convert as convert_module
+        from xgen_edit2docs.tools import ConvertResponse, CostBreakdown
 
         def _fake_convert(req):
             return ConvertResponse(
@@ -125,7 +125,7 @@ class TestKoreanPipelineEndToEnd:
                 cost=CostBreakdown(),
             )
 
-        gd = sys.modules["edit2docs.tools.generate_deck"]
+        gd = sys.modules["xgen_edit2docs.tools.generate_deck"]
         monkeypatch.setattr(convert_module, "convert_to_markdown", _fake_convert)
         monkeypatch.setattr(gd, "convert_to_markdown", _fake_convert)
 
@@ -136,8 +136,8 @@ class TestKoreanPipelineEndToEnd:
         # client, so monkeypatching AnthropicClient hits the path. To also
         # patch strategize/execute_batch (which construct their own clients on
         # the inner branch when client= is None), inject directly:
-        strat_mod = sys.modules["edit2docs.tools.strategize"]
-        exec_mod = sys.modules["edit2docs.tools.execute"]
+        strat_mod = sys.modules["xgen_edit2docs.tools.strategize"]
+        exec_mod = sys.modules["xgen_edit2docs.tools.execute"]
         monkeypatch.setattr(strat_mod, "AnthropicClient", lambda **kwargs: captured)
         monkeypatch.setattr(exec_mod, "AnthropicClient", lambda **kwargs: captured)
 
@@ -220,7 +220,7 @@ class TestTemplateReferencesKoreanAppendix:
         text = (
             Path(__file__).resolve().parents[2]
             / "src"
-            / "edit2docs"
+            / "xgen_edit2docs"
             / "core"
             / "templates"
             / "design_spec_reference.md"
@@ -240,7 +240,7 @@ class TestTemplateReferencesKoreanAppendix:
         text = (
             Path(__file__).resolve().parents[2]
             / "src"
-            / "edit2docs"
+            / "xgen_edit2docs"
             / "core"
             / "templates"
             / "spec_lock_reference.md"

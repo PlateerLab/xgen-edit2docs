@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from edit2docs.tools._image_plan import ImagePlanItem, parse_image_plan
+from xgen_edit2docs.tools._image_plan import ImagePlanItem, parse_image_plan
 
 
 class TestFlatTopLevelImages:

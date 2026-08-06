@@ -8,7 +8,7 @@ warnings only.
 
 from __future__ import annotations
 
-from edit2docs.tools.quality import (
+from xgen_edit2docs.tools.quality import (
     QualityCheckRequest,
     QualitySlide,
     check_svg_quality,

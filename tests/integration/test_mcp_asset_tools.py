@@ -18,10 +18,10 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from edit2docs.db.models import Base
-from edit2docs.mcp import build_mcp_server
-from edit2docs.mcp.context import MCPContext
-from edit2docs.storage import InMemoryStorage
+from xgen_edit2docs.db.models import Base
+from xgen_edit2docs.mcp import build_mcp_server
+from xgen_edit2docs.mcp.context import MCPContext
+from xgen_edit2docs.storage import InMemoryStorage
 
 
 @pytest_asyncio.fixture

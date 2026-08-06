@@ -13,7 +13,7 @@ basename href resolves cleanly.
 
 from __future__ import annotations
 
-from edit2docs.tools.quality import (
+from xgen_edit2docs.tools.quality import (
     QualityCheckRequest,
     QualityCheckResponse,
     QualitySlide,

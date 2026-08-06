@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from edit2docs import preview_doc
+from xgen_edit2docs import preview_doc
 
 
 def _deck_with_chart(tmp_path, chart_type, name="c.pptx"):
@@ -116,7 +116,7 @@ class TestTableDefaultStyle:
 
 class TestMetricWrap:
     def test_measured_width_used_for_known_family(self):
-        from edit2docs.core.pptx_to_svg.txbody_to_svg import _char_width
+        from xgen_edit2docs.core.pptx_to_svg.txbody_to_svg import _char_width
 
         heuristic = _char_width("W", 20.0, False)  # no family → heuristic
         measured = _char_width("W", 20.0, False, family="Noto Sans")
@@ -124,13 +124,13 @@ class TestMetricWrap:
         # 'W' at 0.75em heuristic vs the real Noto advance — they must differ
         # (if fonts are missing the fallback makes them equal, which is fine
         # on bare CI; only assert when a metric was actually found).
-        from edit2docs.core.pptx_to_svg.txbody_to_svg import _measured_char_width
+        from xgen_edit2docs.core.pptx_to_svg.txbody_to_svg import _measured_char_width
 
         if _measured_char_width("W", "Noto Sans", 20.0) is not None:
             assert measured != pytest.approx(heuristic)
 
     def test_metrics_disabled_by_env(self, monkeypatch):
-        from edit2docs.core.pptx_to_svg import txbody_to_svg as t
+        from xgen_edit2docs.core.pptx_to_svg import txbody_to_svg as t
 
         monkeypatch.setenv("E2D_NO_FONT_METRICS", "1")
         t._measured_char_width.cache_clear()

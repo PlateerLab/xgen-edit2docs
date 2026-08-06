@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from xml.etree import ElementTree as ET
 
-from edit2docs.tools.execute import _promote_inline_styles
+from xgen_edit2docs.tools.execute import _promote_inline_styles
 
 
 SVG = "http://www.w3.org/2000/svg"

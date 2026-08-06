@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from edit2docs.core.template_import.context import (
+from xgen_edit2docs.core.template_import.context import (
     TemplateCanvasError,
     build_template_context,
     resolve_template_canvas,

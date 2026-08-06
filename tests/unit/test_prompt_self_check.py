@@ -8,7 +8,7 @@ assert every check item we rely on stays present.
 
 from __future__ import annotations
 
-from edit2docs.llm import load_prompt
+from xgen_edit2docs.llm import load_prompt
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +130,7 @@ def test_executor_hierarchy_rule():
 def test_executor_system_prompt_includes_self_check():
     """The full system prompt threaded together by `_build_system_prompt`
     contains the Executor self-check section."""
-    from edit2docs.tools.execute import _build_system_prompt
+    from xgen_edit2docs.tools.execute import _build_system_prompt
 
     full = _build_system_prompt(style="general", lang="ko-KR")
     assert "Self-check" in full

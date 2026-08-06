@@ -51,7 +51,7 @@ def _xlsx_with_chart() -> bytes:
 
 class TestListCharts:
     def test_pptx_and_xlsx(self):
-        from edit2docs.documents.chart_edit import list_charts
+        from xgen_edit2docs.documents.chart_edit import list_charts
 
         pc = list_charts(_pptx_with_chart(), "pptx")
         assert len(pc) == 1 and pc[0]["kind"] == "column" and pc[0]["chart"] == 0
@@ -59,13 +59,13 @@ class TestListCharts:
         assert xc[0]["title"] == "Old Title"
 
     def test_no_charts_returns_empty(self):
-        from edit2docs.documents.chart_edit import list_charts
-        from edit2docs.documents.docx_engine import docx_from_markdown
+        from xgen_edit2docs.documents.chart_edit import list_charts
+        from xgen_edit2docs.documents.docx_engine import docx_from_markdown
 
         assert list_charts(docx_from_markdown("# Hi"), "docx") == []
 
     def test_never_raises_on_garbage(self):
-        from edit2docs.documents.chart_edit import list_charts
+        from xgen_edit2docs.documents.chart_edit import list_charts
 
         assert list_charts(b"not a document", "xlsx") == []
 
@@ -74,7 +74,7 @@ class TestApplyChartEdits:
     def test_pptx_set_data_and_title_reopen(self, tmp_path):
         from pptx import Presentation
 
-        from edit2docs.documents.chart_edit import ChartEdit, apply_chart_edits
+        from xgen_edit2docs.documents.chart_edit import ChartEdit, apply_chart_edits
 
         content = _pptx_with_chart()
         new_content, results = apply_chart_edits(
@@ -100,7 +100,7 @@ class TestApplyChartEdits:
         assert [round(v) for v in chart.plots[0].series[0].values] == [120, 135, 150]
 
     def test_xlsx_retitle_reopen(self):
-        from edit2docs.documents.chart_edit import (
+        from xgen_edit2docs.documents.chart_edit import (
             ChartEdit,
             apply_chart_edits,
             list_charts,
@@ -114,7 +114,7 @@ class TestApplyChartEdits:
         assert list_charts(new_content, "xlsx")[0]["title"] == "New Title"
 
     def test_out_of_range_not_found(self):
-        from edit2docs.documents.chart_edit import ChartEdit, apply_chart_edits
+        from xgen_edit2docs.documents.chart_edit import ChartEdit, apply_chart_edits
 
         content = _pptx_with_chart()
         new_content, results = apply_chart_edits(
@@ -124,7 +124,7 @@ class TestApplyChartEdits:
         assert new_content == content  # nothing applied → original bytes
 
     def test_invalid_actions(self):
-        from edit2docs.documents.chart_edit import ChartEdit, apply_chart_edits
+        from xgen_edit2docs.documents.chart_edit import ChartEdit, apply_chart_edits
 
         content = _xlsx_with_chart()
         _, results = apply_chart_edits(
@@ -139,7 +139,7 @@ class TestApplyChartEdits:
         assert [r.status for r in results] == ["invalid", "invalid", "invalid"]
 
     def test_ragged_series_is_invalid_not_crash(self):
-        from edit2docs.documents.chart_edit import ChartEdit, apply_chart_edits
+        from xgen_edit2docs.documents.chart_edit import ChartEdit, apply_chart_edits
 
         content = _xlsx_with_chart()
         _, results = apply_chart_edits(
@@ -160,7 +160,7 @@ class TestApplyChartEdits:
         """A chart edit changes only the chart XML + its embedded workbook."""
         import zipfile
 
-        from edit2docs.documents.chart_edit import ChartEdit, apply_chart_edits
+        from xgen_edit2docs.documents.chart_edit import ChartEdit, apply_chart_edits
 
         content = _xlsx_with_chart()
         new_content, _ = apply_chart_edits(
@@ -187,7 +187,7 @@ class TestPublicVerb:
     def test_edit_chart_and_list_charts_and_analyze(self, tmp_path):
         from pptx import Presentation
 
-        from edit2docs import analyze_doc, edit_chart, list_charts
+        from xgen_edit2docs import analyze_doc, edit_chart, list_charts
 
         p = tmp_path / "d.pptx"
         p.write_bytes(_pptx_with_chart())
@@ -206,7 +206,7 @@ class TestPublicVerb:
         assert list(chart.plots[0].categories) == ["X", "Y"]
 
     def test_edit_chart_infers_action_from_fields(self, tmp_path):
-        from edit2docs import edit_chart
+        from xgen_edit2docs import edit_chart
 
         p = tmp_path / "d.xlsx"
         p.write_bytes(_xlsx_with_chart())
@@ -215,8 +215,8 @@ class TestPublicVerb:
         assert res.applied == 1
 
     def test_no_charts_applies_nothing(self, tmp_path):
-        from edit2docs import edit_chart
-        from edit2docs.documents.docx_engine import docx_from_markdown
+        from xgen_edit2docs import edit_chart
+        from xgen_edit2docs.documents.docx_engine import docx_from_markdown
 
         p = tmp_path / "d.docx"
         p.write_bytes(docx_from_markdown("# No charts here"))
@@ -228,7 +228,7 @@ class TestAgentToolSurface:
     def test_chart_edits_dispatch_through_set_doc_text(self, tmp_path):
         """Chart edits ride the unified set_doc_text tool (a `chart` key
         routes the edit to the chart engine)."""
-        from edit2docs.agent_tools import TOOL_NAMES, run_tool
+        from xgen_edit2docs.agent_tools import TOOL_NAMES, run_tool
 
         assert "edit_chart" not in TOOL_NAMES  # consolidated away
         p = tmp_path / "d.pptx"

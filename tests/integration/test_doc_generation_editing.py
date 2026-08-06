@@ -8,11 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from edit2docs.documents.docx_engine import docx_from_markdown, docx_outline
-from edit2docs.documents.xlsx_engine import xlsx_from_spec, xlsx_outline
-from edit2docs.llm.anthropic_client import LLMResult, LLMUsage
-from edit2docs.tools.edit_doc import EditDocRequest, edit_document
-from edit2docs.tools.generate_doc import GenerateDocRequest, generate_document
+from xgen_edit2docs.documents.docx_engine import docx_from_markdown, docx_outline
+from xgen_edit2docs.documents.xlsx_engine import xlsx_from_spec, xlsx_outline
+from xgen_edit2docs.llm.anthropic_client import LLMResult, LLMUsage
+from xgen_edit2docs.tools.edit_doc import EditDocRequest, edit_document
+from xgen_edit2docs.tools.generate_doc import GenerateDocRequest, generate_document
 
 
 @dataclass
@@ -59,7 +59,7 @@ class TestGenerateDocument:
     @pytest.mark.asyncio
     async def test_docx_generation(self, monkeypatch):
         llm = _ScriptedLLM(outputs=[f"```document\n{DOC_MD}```"])
-        _wire(monkeypatch, "edit2docs.tools.generate_doc", llm)
+        _wire(monkeypatch, "xgen_edit2docs.tools.generate_doc", llm)
         resp = await generate_document(
             GenerateDocRequest(intent="주간 보고서", fmt="docx",
                                anthropic_api_key="sk-stub")
@@ -72,7 +72,7 @@ class TestGenerateDocument:
         llm = _ScriptedLLM(
             outputs=["말로만 하는 대답 (스펙 블록 없음)", f"```sheet_spec\n{SHEET_YAML}```"]
         )
-        _wire(monkeypatch, "edit2docs.tools.generate_doc", llm)
+        _wire(monkeypatch, "xgen_edit2docs.tools.generate_doc", llm)
         resp = await generate_document(
             GenerateDocRequest(intent="진척 시트", fmt="xlsx",
                                anthropic_api_key="sk-stub")
@@ -86,7 +86,7 @@ class TestGenerateDocument:
     @pytest.mark.asyncio
     async def test_double_failure_raises_bilingual(self, monkeypatch):
         llm = _ScriptedLLM(outputs=["no block", "still no block"])
-        _wire(monkeypatch, "edit2docs.tools.generate_doc", llm)
+        _wire(monkeypatch, "xgen_edit2docs.tools.generate_doc", llm)
         with pytest.raises(ValueError, match="문서 생성에 실패"):
             await generate_document(
                 GenerateDocRequest(intent="x", fmt="xlsx",
@@ -110,7 +110,7 @@ class TestEditDocument:
             "```"
         )
         llm = _ScriptedLLM(outputs=[plan])
-        _wire(monkeypatch, "edit2docs.tools.edit_doc", llm)
+        _wire(monkeypatch, "xgen_edit2docs.tools.edit_doc", llm)
         resp = await edit_document(
             EditDocRequest(content=content, fmt="docx", instruction="진행사항 갱신",
                            anthropic_api_key="sk-stub")
@@ -134,7 +134,7 @@ class TestEditDocument:
             "    value: \"완료\"\n```"
         )
         llm = _ScriptedLLM(outputs=[plan])
-        _wire(monkeypatch, "edit2docs.tools.edit_doc", llm)
+        _wire(monkeypatch, "xgen_edit2docs.tools.edit_doc", llm)
         resp = await edit_document(
             EditDocRequest(content=content, fmt="xlsx", instruction="배포 상태 완료로",
                            anthropic_api_key="sk-stub")
@@ -148,7 +148,7 @@ class TestEditDocument:
         llm = _ScriptedLLM(
             outputs=["```reply\n이 문서는 주간 보고서입니다.\n```\n```edit_plan\noperations: []\n```"]
         )
-        _wire(monkeypatch, "edit2docs.tools.edit_doc", llm)
+        _wire(monkeypatch, "xgen_edit2docs.tools.edit_doc", llm)
         resp = await edit_document(
             EditDocRequest(content=content, fmt="docx", instruction="이 문서 뭐야?",
                            anthropic_api_key="sk-stub")
@@ -160,7 +160,7 @@ class TestEditDocument:
     async def test_plan_missing_retries_then_admits(self, monkeypatch):
         content = docx_from_markdown(DOC_MD)
         llm = _ScriptedLLM(outputs=["고치겠습니다.", "이번에도 계획 없음."])
-        _wire(monkeypatch, "edit2docs.tools.edit_doc", llm)
+        _wire(monkeypatch, "xgen_edit2docs.tools.edit_doc", llm)
         resp = await edit_document(
             EditDocRequest(content=content, fmt="docx", instruction="다 고쳐줘",
                            anthropic_api_key="sk-stub")
@@ -174,7 +174,7 @@ class TestEditDocument:
     async def test_plan_missing_notice_localizes_to_korean(self, monkeypatch):
         content = docx_from_markdown(DOC_MD)
         llm = _ScriptedLLM(outputs=["고치겠습니다.", "이번에도 계획 없음."])
-        _wire(monkeypatch, "edit2docs.tools.edit_doc", llm)
+        _wire(monkeypatch, "xgen_edit2docs.tools.edit_doc", llm)
         resp = await edit_document(
             EditDocRequest(content=content, fmt="docx", instruction="다 고쳐줘",
                            lang="ko-KR", anthropic_api_key="sk-stub")
@@ -185,7 +185,7 @@ class TestEditDocument:
 
 class TestUnifiedFacade:
     def test_extension_dispatch_and_deterministic_verbs(self, tmp_path: Path):
-        from edit2docs import analyze_doc, preview_doc, set_doc_text
+        from xgen_edit2docs import analyze_doc, preview_doc, set_doc_text
 
         docx_path = tmp_path / "r.docx"
         docx_path.write_bytes(docx_from_markdown(DOC_MD))
@@ -215,7 +215,7 @@ class TestUnifiedFacade:
         assert Path(md_preview).name == "preview.md"
 
     def test_unsupported_extension_raises(self, tmp_path: Path):
-        from edit2docs import analyze_doc
+        from xgen_edit2docs import analyze_doc
 
         bad = tmp_path / "file.hwp"
         bad.write_bytes(b"x")
@@ -223,7 +223,7 @@ class TestUnifiedFacade:
             analyze_doc(bad)
 
     def test_agent_tools_dispatch(self, tmp_path: Path):
-        from edit2docs.agent_tools import TOOL_NAMES, run_tool
+        from xgen_edit2docs.agent_tools import TOOL_NAMES, run_tool
 
         assert TOOL_NAMES == [
             "doc_guide", "analyze_doc", "render_doc", "set_doc_text",
@@ -254,7 +254,7 @@ class TestEditStreaming:
             "  - action: replace\n    para: 1\n    new_text: \"수정2\"\n```"
         )
         llm = _ScriptedLLM(outputs=[plan])
-        _wire(monkeypatch, "edit2docs.tools.edit_doc", llm)
+        _wire(monkeypatch, "xgen_edit2docs.tools.edit_doc", llm)
 
         events: list = []
 
@@ -293,7 +293,7 @@ class TestEditStreaming:
             "  - action: set_cell\n    sheet: \"S\"\n    cell: \"A2\"\n    value: 9\n```"
         )
         llm = _ScriptedLLM(outputs=[plan])
-        _wire(monkeypatch, "edit2docs.tools.edit_doc", llm)
+        _wire(monkeypatch, "xgen_edit2docs.tools.edit_doc", llm)
         events: list = []
 
         async def on_event(e):

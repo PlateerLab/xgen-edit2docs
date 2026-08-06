@@ -13,7 +13,7 @@ Three coordinated paths:
 
 from __future__ import annotations
 
-from edit2docs.tools._layout_brief import (
+from xgen_edit2docs.tools._layout_brief import (
     Zone,
     _merge_zones,
     _parse_zones_from_spec_lock,
@@ -27,7 +27,7 @@ from edit2docs.tools._layout_brief import (
 
 
 def test_prompt_page_zones_instructions_present():
-    from edit2docs.llm import load_prompt
+    from xgen_edit2docs.llm import load_prompt
     text = load_prompt("strategist")
     assert "page_zones" in text
     # The format example is in the prompt so the model knows the schema.
@@ -172,7 +172,7 @@ def test_build_briefs_falls_back_to_rhythm_when_no_zones():
 
 
 def test_validator_flags_off_canvas_zone():
-    from edit2docs.tools._spec_validator import validate_spec_lock
+    from xgen_edit2docs.tools._spec_validator import validate_spec_lock
 
     spec = (
         "page_zones:\n"
@@ -188,7 +188,7 @@ def test_validator_flags_off_canvas_zone():
 
 
 def test_validator_flags_page_number_too_narrow():
-    from edit2docs.tools._spec_validator import validate_spec_lock
+    from xgen_edit2docs.tools._spec_validator import validate_spec_lock
 
     spec = (
         "page_zones:\n"
@@ -204,7 +204,7 @@ def test_validator_flags_page_number_too_narrow():
 
 
 def test_validator_flags_title_chapter_y_overlap():
-    from edit2docs.tools._spec_validator import validate_spec_lock
+    from xgen_edit2docs.tools._spec_validator import validate_spec_lock
 
     spec = (
         "page_zones:\n"
@@ -221,7 +221,7 @@ def test_validator_flags_title_chapter_y_overlap():
 
 
 def test_validator_passes_clean_zones():
-    from edit2docs.tools._spec_validator import validate_spec_lock
+    from xgen_edit2docs.tools._spec_validator import validate_spec_lock
 
     spec = (
         "page_zones:\n"

@@ -22,8 +22,8 @@ from pathlib import Path
 
 import pytest
 
-from edit2docs.llm.anthropic_client import LLMResult, LLMUsage
-from edit2docs.tools import (
+from xgen_edit2docs.llm.anthropic_client import LLMResult, LLMUsage
+from xgen_edit2docs.tools import (
     ConvertRequest,
     ConvertResponse,
     CostBreakdown,
@@ -34,7 +34,7 @@ from edit2docs.tools import (
     StrategizeResponse,
     WarningEntry,
 )
-from edit2docs.tools.generate_deck import GenerateDeckRequest, generate_deck
+from xgen_edit2docs.tools.generate_deck import GenerateDeckRequest, generate_deck
 
 # 1x1 PNG (8 bytes header + IHDR + IDAT + IEND). Used as the image generator's
 # deterministic return value.
@@ -120,8 +120,8 @@ class TestImagePipelineEndToEnd:
     def setup_method(self):
         # Reach the generate_deck module via sys.modules (the submodule
         # attribute is shadowed by the re-exported function).
-        self.gd = sys.modules["edit2docs.tools.generate_deck"]
-        import edit2docs.tools.convert as convert_module
+        self.gd = sys.modules["xgen_edit2docs.tools.generate_deck"]
+        import xgen_edit2docs.tools.convert as convert_module
         self.convert_module = convert_module
 
     def _make_request(self, **overrides) -> GenerateDeckRequest:

@@ -18,7 +18,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from openpyxl import Workbook
 
-from edit2docs.documents.docx_engine import (
+from xgen_edit2docs.documents.docx_engine import (
     DocxEdit,
     apply_docx_edits,
     docx_from_markdown,
@@ -26,7 +26,7 @@ from edit2docs.documents.docx_engine import (
     docx_preview,
     docx_to_html,
 )
-from edit2docs.documents.xlsx_engine import xlsx_preview, xlsx_to_html
+from xgen_edit2docs.documents.xlsx_engine import xlsx_preview, xlsx_to_html
 
 
 def _docx(build) -> bytes:
@@ -221,7 +221,7 @@ class TestDocxPreviewFidelity:
 
 class TestDocxPreviewFallback:
     def test_falls_back_to_mammoth_with_warning(self, monkeypatch):
-        import edit2docs.documents.docx_html as docx_html
+        import xgen_edit2docs.documents.docx_html as docx_html
 
         def boom(_content):
             raise RuntimeError("simulated renderer failure")

@@ -1,26 +1,26 @@
-# edit2docs
+# xgen_edit2docs
 
 **AI-agent-native document engine — DOCX · XLSX · PPTX. English-first, with first-class Korean support.**
 
-[![PyPI](https://img.shields.io/pypi/v/edit2docs)](https://pypi.org/project/edit2docs/)
-[![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://pypi.org/project/edit2docs/)
+[![PyPI](https://img.shields.io/pypi/v/xgen_edit2docs)](https://pypi.org/project/xgen_edit2docs/)
+[![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://pypi.org/project/xgen_edit2docs/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green)](./LICENSE)
 
 [한국어 README](./README.ko.md)
 
-`edit2docs` generates complete Office documents from a one-line intent and
+`xgen_edit2docs` generates complete Office documents from a one-line intent and
 chat-edits existing files — Word reports, Excel workbooks, PowerPoint decks —
 always producing **natively editable OOXML** (real paragraphs, real cells,
 real charts — never screenshots of them). One engine, four surfaces: import
 it, hand it to an agent, plug it into an MCP client, or run it as a service.
 
 ```bash
-pip install edit2docs              # library + agent tools + local MCP
-pip install "edit2docs[server]"    # + the hosted multi-tenant service
+pip install xgen_edit2docs              # library + agent tools + local MCP
+pip install "xgen_edit2docs[server]"    # + the hosted multi-tenant service
 ```
 
 ```python
-from edit2docs import generate_doc, edit_doc
+from xgen_edit2docs import generate_doc, edit_doc
 
 generate_doc("Executive briefing on Q3 sales", output="deck.pptx")
 r = edit_doc("deck.pptx", "Make slide 3's title more assertive")
@@ -33,14 +33,14 @@ print(r.reply)          # the editor explains what it changed
 
 | Repo | What it is |
 |---|---|
-| **[edit2docs](https://github.com/CocoRoF/edit2docs)** (this repo) | The engine: library · agent tools · MCP · hosted FastAPI service |
-| **[edit2docs-web](https://github.com/CocoRoF/edit2docs-web)** | Web studio for the hosted service — upload, generate, chat-edit with a live addressable preview, per-op edit highlighting, EN/KO UI. Next.js 15 / React 19 / Tailwind |
+| **[xgen_edit2docs](https://github.com/PlateerLab/xgen-edit2docs)** (this repo) | The engine: library · agent tools · MCP · hosted FastAPI service |
+| **[xgen_edit2docs-web](https://github.com/PlateerLab/xgen-edit2docs)** | Web studio for the hosted service — upload, generate, chat-edit with a live addressable preview, per-op edit highlighting, EN/KO UI. Next.js 15 / React 19 / Tailwind |
 | [ppt-master](https://github.com/hugohe3/ppt-master) | Upstream project (MIT) the PPTX core is derived from — synced through v3.1 |
-| [edit2ppt](https://github.com/CocoRoF/edit2ppt) | Sister project; the deck pipeline and hosted service originate there |
+| [edit2ppt](https://github.com/PlateerLab/xgen-edit2docs) | Sister project; the deck pipeline and hosted service originate there |
 
 A production deployment of engine + studio runs behind
-[hr_blog2.0](https://github.com/CocoRoF/hr_blog2.0)'s compose stack — its
-`edit2docs-server/` and `edit2docs-web/` service dirs are a working reference
+[hr_blog2.0](https://github.com/PlateerLab/xgen-edit2docs)'s compose stack — its
+`xgen_edit2docs-server/` and `xgen_edit2docs-web/` service dirs are a working reference
 for wiring both containers behind nginx.
 
 ---
@@ -62,7 +62,7 @@ ones are BYOK (`api_key=...` or `ANTHROPIC_API_KEY`).
 | `edit_chart` | deterministically edit a native chart's **data or title** — rewrites the chart *and* its embedded workbook | — |
 
 **Lossless editing.** The deterministic edit verbs run on
-[contextifier](https://github.com/CocoRoF/Contextifier)'s raw OOXML layer:
+[xgen_contextifier](https://github.com/PlateerLab/xgen-edit2docs)'s raw OOXML layer:
 edits are surgical and untouched package parts stay byte-identical, so a
 chart, pivot table, sparkline, inline image or cached formula is never
 collateral damage of a text edit. The PPTX chat editor (`edit_doc` on a
@@ -76,7 +76,7 @@ regenerates, instead of flattening them into pictures.
 ### Generate — the output extension picks the engine
 
 ```python
-from edit2docs import generate_doc
+from xgen_edit2docs import generate_doc
 
 generate_doc("Q3 performance report", output="report.docx")
 generate_doc("Quarterly sales summary", output="sales.xlsx", sources=["raw.pdf"])
@@ -97,7 +97,7 @@ each is converted to markdown and given to the writer as reference material.
 ### Edit — one chat turn, everything else byte-identical
 
 ```python
-from edit2docs import edit_doc
+from xgen_edit2docs import edit_doc
 
 r = edit_doc("report.docx", "Add a 'deployment complete' item to the progress section")
 print(r.reply)        # what the editor did, in your language
@@ -117,7 +117,7 @@ honestly instead of pretending (no silent no-ops).
 ### Inspect & edit deterministically (no LLM, no key)
 
 ```python
-from edit2docs import analyze_doc, set_doc_text, preview_doc, render_doc
+from xgen_edit2docs import analyze_doc, set_doc_text, preview_doc, render_doc
 
 info = analyze_doc("report.docx")
 # {"format": "docx", "outline": [
@@ -136,7 +136,7 @@ set_doc_text("deck.pptx", [
 
 # Edit a native chart's data or title — the chart stays a real, editable
 # PowerPoint/Excel chart (its embedded workbook is rewritten too).
-from edit2docs import edit_chart, list_charts
+from xgen_edit2docs import edit_chart, list_charts
 
 list_charts("deck.pptx")   # [{"chart": 0, "kind": "bar", "title": ..., "series": [...]}]
 edit_chart("deck.pptx", [
@@ -161,7 +161,7 @@ The same seven verbs as Anthropic tool-use schemas plus a dispatcher:
 
 ```python
 import anthropic
-from edit2docs.agent_tools import ANTHROPIC_TOOLS, run_tool
+from xgen_edit2docs.agent_tools import ANTHROPIC_TOOLS, run_tool
 
 client = anthropic.Anthropic()
 msg = client.messages.create(
@@ -179,15 +179,15 @@ for block in msg.content:
 
 ## 3 · Local MCP server (zero infra)
 
-`pip install edit2docs` ships an `edit2docs-mcp` stdio server exposing all six
+`pip install xgen_edit2docs` ships an `xgen_edit2docs-mcp` stdio server exposing all six
 verbs over local files:
 
 ```jsonc
 // Claude Desktop / Claude Code / Cursor
 {
   "mcpServers": {
-    "edit2docs": {
-      "command": "edit2docs-mcp",
+    "xgen_edit2docs": {
+      "command": "xgen_edit2docs-mcp",
       "env": { "ANTHROPIC_API_KEY": "sk-ant-..." }   // only generative tools need it
     }
   }
@@ -202,8 +202,8 @@ Then just talk: *"generate a 10-page deck about our roadmap as
 ## 4 · Hosted service
 
 ```bash
-pip install "edit2docs[server]"
-edit2docs serve                    # FastAPI on :8000 — standalone mode
+pip install "xgen_edit2docs[server]"
+xgen_edit2docs serve                    # FastAPI on :8000 — standalone mode
 ```
 
 Standalone mode needs **zero external infra**: SQLite + local-fs storage + an
@@ -229,7 +229,7 @@ Key env vars (prefix `EDIT2DOCS_`):
 | var | default | notes |
 |---|---|---|
 | `EDIT2DOCS_DEFAULT_LANG` | `en-US` | set `ko-KR` to make a deployment Korean-by-default |
-| `EDIT2DOCS_DATA_DIR` | `/data/edit2docs` | standalone SQLite + file storage root |
+| `EDIT2DOCS_DATA_DIR` | `/data/xgen_edit2docs` | standalone SQLite + file storage root |
 | `EDIT2DOCS_DATABASE_URL` | (sqlite) | e.g. `postgresql+asyncpg://...` |
 | `EDIT2DOCS_REDIS_URL` | (inline queue) | enables the arq worker queue |
 | `EDIT2DOCS_S3_*` | (local fs) | endpoint / bucket / keys for S3-compatible storage |
@@ -240,7 +240,7 @@ Key env vars (prefix `EDIT2DOCS_`):
 
 ### The web studio
 
-[**edit2docs-web**](https://github.com/CocoRoF/edit2docs-web) is the official
+[**xgen_edit2docs-web**](https://github.com/PlateerLab/xgen-edit2docs) is the official
 frontend for this service: drag-and-drop upload, generation with staged SSE
 progress, and a co-editing studio where the chat edits your document while the
 canvas **highlights the exact paragraph / cell / slide each operation
@@ -320,10 +320,10 @@ detection and font-stack treatment.
 ## Development
 
 ```bash
-git clone https://github.com/CocoRoF/edit2docs && cd edit2docs
+git clone https://github.com/PlateerLab/xgen-edit2docs && cd xgen_edit2docs
 uv venv .venv && uv pip install -e ".[server,dev]"
 .venv/bin/python -m pytest tests/          # 769 tests
-.venv/bin/python -m ruff check src/edit2docs --exclude src/edit2docs/core
+.venv/bin/python -m ruff check src/xgen_edit2docs --exclude src/xgen_edit2docs/core
 ```
 
 ## Version history
@@ -333,7 +333,7 @@ uv venv .venv && uv pip install -e ".[server,dev]"
 | **v0.14.1** | dependency fix — cap `mcp < 2.0` (the 2.0 major dropped `mcp.server.fastmcp`; an uncapped floor crash-looped the hosted server) |
 | v0.10–0.14 | **`build_doc`** (deterministic generation, no LLM) · **`read_doc_xml`/`set_doc_xml`** (direct OOXML editing, create/delete parts) · agent surface consolidated to **8 verbs** · **hierarchical `doc_guide`** (progressive-disclosure skill map) · **themed decks** (deterministic design in one `build_doc` call) |
 | **v0.9.0** | **token optimization** — prompt-cache restructuring (edit retries read the cached prefix ~10× cheaper; per-page executor spec_lock cached once, not re-sent), fan-out cache warm-up, unbounded-input caps (strategist sources, edit outline windowing), retry-severity tiering, per-role model tiering, streaming, honest cache accounting + per-stage cost |
-| v0.8.0 | **lossless editing** on [contextifier](https://github.com/CocoRoF/Contextifier)'s raw OOXML layer — set_doc_text/edit_doc no longer destroy charts, images, sparklines, styles or cached formulas; PPTX chat-edit preserves native charts/tables; new **`edit_chart`** verb (data + title, embedded workbook synced) |
+| v0.8.0 | **lossless editing** on [xgen_contextifier](https://github.com/PlateerLab/xgen-edit2docs)'s raw OOXML layer — set_doc_text/edit_doc no longer destroy charts, images, sparklines, styles or cached formulas; PPTX chat-edit preserves native charts/tables; new **`edit_chart`** verb (data + title, embedded workbook synced) |
 | v0.7.0 | upstream sync (ppt-master v2.7 → v3.1, 3 waves): **native chart/table export**, paragraph-merge editability, PowerPoint repair-prompt fixes, checker hardening · **English-first flip** with full Korean support |
 | v0.5–0.6 | `render_doc` — native page rendering to PNG/PDF/SVG for all 3 formats (resvg + PyMuPDF, no LibreOffice) |
 | v0.4.0 | addressable native previews (`data-e2d-*`) — preview, outline and editor share one address space |
@@ -343,9 +343,9 @@ uv venv .venv && uv pip install -e ".[server,dev]"
 
 ## License
 
-[Apache-2.0](./LICENSE). The PPTX core under `src/edit2docs/core/` is derived
+[Apache-2.0](./LICENSE). The PPTX core under `src/xgen_edit2docs/core/` is derived
 from [ppt-master](https://github.com/hugohe3/ppt-master) (MIT, © Hugo He) via
-[edit2ppt](https://github.com/CocoRoF/edit2ppt) and kept in sync (currently
+[edit2ppt](https://github.com/PlateerLab/xgen-edit2docs) and kept in sync (currently
 through upstream v3.1); the original MIT terms for those portions are
 preserved in [NOTICE](./NOTICE) and
 [LICENSE.ppt-master.MIT](./LICENSE.ppt-master.MIT).

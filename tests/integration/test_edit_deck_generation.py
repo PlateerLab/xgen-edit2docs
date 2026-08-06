@@ -16,8 +16,8 @@ from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE
 from pptx.util import Emu, Inches
 
-from edit2docs.llm.anthropic_client import LLMResult, LLMUsage
-from edit2docs.tools.edit_deck import EditDeckRequest, edit_deck
+from xgen_edit2docs.llm.anthropic_client import LLMResult, LLMUsage
+from xgen_edit2docs.tools.edit_deck import EditDeckRequest, edit_deck
 
 NEW_SVG = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">'
@@ -101,7 +101,7 @@ class TestEditDeck:
         llm = _RoutingLLM(plan=PLAN_EDIT_AND_ADD)
         import sys
 
-        ed = sys.modules["edit2docs.tools.edit_deck"]
+        ed = sys.modules["xgen_edit2docs.tools.edit_deck"]
         monkeypatch.setattr(ed, "AnthropicClient", lambda **kw: llm)
 
         events: list[str] = []
@@ -132,7 +132,7 @@ class TestEditDeck:
         llm = _RoutingLLM(plan=PLAN_EMPTY)
         import sys
 
-        ed = sys.modules["edit2docs.tools.edit_deck"]
+        ed = sys.modules["xgen_edit2docs.tools.edit_deck"]
         monkeypatch.setattr(ed, "AnthropicClient", lambda **kw: llm)
 
         original = _host_pptx_bytes(tmp_path)
@@ -149,10 +149,10 @@ class TestEditDeck:
         llm = _RoutingLLM(plan=PLAN_EMPTY)
         import sys
 
-        ed = sys.modules["edit2docs.tools.edit_deck"]
+        ed = sys.modules["xgen_edit2docs.tools.edit_deck"]
         monkeypatch.setattr(ed, "AnthropicClient", lambda **kw: llm)
 
-        from edit2docs.tools.edit_deck import ChatTurn
+        from xgen_edit2docs.tools.edit_deck import ChatTurn
 
         req = EditDeckRequest(
             pptx=_host_pptx_bytes(tmp_path),
@@ -224,7 +224,7 @@ class TestEditDeckNativeProtection:
         llm = _RoutingLLM(plan=PLAN_EDIT_NATIVE_SLIDE)
         import sys
 
-        ed = sys.modules["edit2docs.tools.edit_deck"]
+        ed = sys.modules["xgen_edit2docs.tools.edit_deck"]
         monkeypatch.setattr(ed, "AnthropicClient", lambda **kw: llm)
 
         events: list = []
@@ -278,7 +278,7 @@ class TestEditDeckNativeProtection:
         llm = _RoutingLLM(plan=PLAN_EDIT_NATIVE_SLIDE)
         import sys
 
-        ed = sys.modules["edit2docs.tools.edit_deck"]
+        ed = sys.modules["xgen_edit2docs.tools.edit_deck"]
         monkeypatch.setattr(ed, "AnthropicClient", lambda **kw: llm)
 
         req = EditDeckRequest(

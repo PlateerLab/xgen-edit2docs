@@ -7,13 +7,13 @@ the Korean path is a degraded subset.
 
 from __future__ import annotations
 
-from edit2docs.api.errors import bilingual_detail
-from edit2docs.core.config import DEFAULT_FONT_STACKS, default_font_stack
-from edit2docs.documents.docx_engine import base_font_for_lang
-from edit2docs.i18n import DEFAULT_LOCALE, FALLBACK_LOCALE
-from edit2docs.tools._edit_events import op_summary, plan_event_vars
-from edit2docs.tools._reply_texts import reply_text
-from edit2docs.tools.types import DEFAULT_LANG
+from xgen_edit2docs.api.errors import bilingual_detail
+from xgen_edit2docs.core.config import DEFAULT_FONT_STACKS, default_font_stack
+from xgen_edit2docs.documents.docx_engine import base_font_for_lang
+from xgen_edit2docs.i18n import DEFAULT_LOCALE, FALLBACK_LOCALE
+from xgen_edit2docs.tools._edit_events import op_summary, plan_event_vars
+from xgen_edit2docs.tools._reply_texts import reply_text
+from xgen_edit2docs.tools.types import DEFAULT_LANG
 
 
 class TestDefaults:
@@ -25,7 +25,7 @@ class TestDefaults:
         assert FALLBACK_LOCALE == "en-US"
 
     def test_settings_default_lang_is_english(self):
-        from edit2docs.config import Settings
+        from xgen_edit2docs.config import Settings
 
         assert Settings.model_fields["default_lang"].default == "en-US"
 
@@ -118,7 +118,7 @@ class TestDocxBaseFont:
 
         from docx import Document
 
-        from edit2docs.documents.docx_engine import docx_from_markdown
+        from xgen_edit2docs.documents.docx_engine import docx_from_markdown
 
         en_doc = Document(io.BytesIO(docx_from_markdown("# Title\n\nBody")))
         assert en_doc.styles["Normal"].font.name == "Calibri"

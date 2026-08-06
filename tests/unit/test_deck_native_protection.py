@@ -20,8 +20,8 @@ from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE
 from pptx.util import Emu, Inches
 
-from edit2docs.core.svg_to_pptx.pptx_edit import KeepSlide, NewSlide, recompose_pptx
-from edit2docs.tools.edit_deck import _native_inventory
+from xgen_edit2docs.core.svg_to_pptx.pptx_edit import KeepSlide, NewSlide, recompose_pptx
+from xgen_edit2docs.tools.edit_deck import _native_inventory
 
 # 1x1 PNG — a real embedded image forces the regenerated slide's rels to
 # allocate an rId, so the carried chart rId must renumber past it.

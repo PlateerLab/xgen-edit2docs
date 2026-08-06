@@ -1,4 +1,4 @@
-# Local-dev infrastructure for edit2docs.
+# Local-dev infrastructure for xgen_edit2docs.
 #
 # Spins up Postgres + Redis + MinIO so the API server, worker, and tests can
 # run against real services without touching cloud accounts. Production
@@ -15,15 +15,15 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: edit2docs
-      POSTGRES_PASSWORD: edit2docs
-      POSTGRES_DB: edit2docs
+      POSTGRES_USER: xgen_edit2docs
+      POSTGRES_PASSWORD: xgen_edit2docs
+      POSTGRES_DB: xgen_edit2docs
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U edit2docs -d edit2docs"]
+      test: ["CMD-SHELL", "pg_isready -U xgen_edit2docs -d xgen_edit2docs"]
       interval: 3s
       timeout: 3s
       retries: 20
@@ -42,8 +42,8 @@ services:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: edit2docs
-      MINIO_ROOT_PASSWORD: edit2docs-local-secret
+      MINIO_ROOT_USER: xgen_edit2docs
+      MINIO_ROOT_PASSWORD: xgen_edit2docs-local-secret
     ports:
       - "127.0.0.1:9000:9000"  # S3 API
       - "127.0.0.1:9001:9001"  # Web console
@@ -65,11 +65,11 @@ services:
       minio:
         condition: service_healthy
     environment:
-      EDIT2DOCS_DATABASE_URL: postgresql+asyncpg://edit2docs:edit2docs@postgres:5432/edit2docs
+      EDIT2DOCS_DATABASE_URL: postgresql+asyncpg://xgen_edit2docs:xgen_edit2docs@postgres:5432/xgen_edit2docs
       EDIT2DOCS_S3_ENDPOINT_URL: http://minio:9000
-      EDIT2DOCS_S3_BUCKET: edit2docs-local
-      EDIT2DOCS_S3_ACCESS_KEY_ID: edit2docs
-      EDIT2DOCS_S3_SECRET_ACCESS_KEY: edit2docs-local-secret
+      EDIT2DOCS_S3_BUCKET: xgen_edit2docs-local
+      EDIT2DOCS_S3_ACCESS_KEY_ID: xgen_edit2docs
+      EDIT2DOCS_S3_SECRET_ACCESS_KEY: xgen_edit2docs-local-secret
     working_dir: /workspace
     volumes:
       - ./:/workspace:ro

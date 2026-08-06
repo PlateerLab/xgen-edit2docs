@@ -1,11 +1,11 @@
 [project]
-name = "edit2docs"
-version = "0.14.1"
+name = "xgen-edit2docs"
+version = "0.15.0"
 description = "AI-agent-native document engine: generate and chat-edit DOCX, XLSX and PPTX as a Python library, agent tool set, MCP server or hosted service. English-first with first-class Korean support. Sister project of edit2ppt."
 readme = "README.md"
 requires-python = ">=3.12"
 license = {text = "Apache-2.0"}
-authors = [{name = "edit2docs contributors"}]
+authors = [{name = "xgen_edit2docs contributors"}]
 keywords = [
     "pptx", "docx", "xlsx", "powerpoint", "word", "excel", "ooxml",
     "document-generation", "document-editing", "presentation",
@@ -22,7 +22,7 @@ classifiers = [
 
 # Core = everything the LIBRARY / agent-tools / local MCP surfaces need:
 # the tool layer (generate/edit/preview/text-edit) with zero server infra.
-# `pip install edit2docs` stays lean; the hosted service adds `[server]`.
+# `pip install xgen_edit2docs` stays lean; the hosted service adds `[server]`.
 dependencies = [
     "pydantic>=2.9.0",
     "pydantic-settings>=2.6.0",
@@ -34,11 +34,11 @@ dependencies = [
     "PyMuPDF>=1.23.0",
     "mammoth>=1.6.0",
     "openpyxl>=3.1.0",
-    # Lossless raw OOXML layer (contextifier.open_raw): surgical xlsx/docx
+    # Lossless raw OOXML layer (xgen_contextifier.open_raw): surgical xlsx/docx
     # edits and PPTX native-content preservation that keep charts,
     # sparklines, custom XML, cached formula values and native
     # charts/tables byte-identical through an edit.
-    "contextifier>=0.4.0",
+    "xgen-contextifier>=0.5.0",
     # Native chart export (data-pptx-native markers) generates the chart's
     # embedded XLSX workbook with XlsxWriter (upstream 53c6cad5).
     "XlsxWriter>=3.0",
@@ -54,7 +54,7 @@ dependencies = [
     "edge-tts>=7.2.8",
     # LLM
     "anthropic>=0.40.0",
-    # MCP (Model Context Protocol) — powers the zero-infra `edit2docs-mcp`
+    # MCP (Model Context Protocol) — powers the zero-infra `xgen_edit2docs-mcp`
     # and the hosted MCP-over-HTTP transport. Capped below 2.0: the 2.0
     # major dropped the `mcp.server.fastmcp` module our server imports, so
     # an uncapped floor silently resolves the breaking release and the
@@ -85,7 +85,7 @@ server = [
 ]
 dev = [
     # The test suite covers the hosted service too.
-    "edit2docs[server]",
+    "xgen_edit2docs[server]",
     "pytest>=8.3.3",
     "pytest-asyncio>=0.24.0",
     "pytest-cov>=6.0.0",
@@ -105,25 +105,25 @@ svg-fallback = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/CocoRoF/edit2docs"
-Issues = "https://github.com/CocoRoF/edit2docs/issues"
+Homepage = "https://github.com/PlateerLab/xgen-edit2docs"
+Issues = "https://github.com/PlateerLab/xgen-edit2docs/issues"
 Upstream = "https://github.com/hugohe3/ppt-master"
 
 [project.scripts]
-edit2docs = "edit2docs.cli:main"
+xgen_edit2docs = "xgen_edit2docs.cli:main"
 # Zero-infra stdio MCP server over local files (Claude Desktop / Code / Cursor):
-#   uvx --from edit2docs edit2docs-mcp   or   pip install edit2docs && edit2docs-mcp
-edit2docs-mcp = "edit2docs.mcp.local_main:main"
+#   uvx --from xgen_edit2docs xgen_edit2docs-mcp   or   pip install xgen_edit2docs && xgen_edit2docs-mcp
+xgen_edit2docs-mcp = "xgen_edit2docs.mcp.local_main:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/edit2docs"]
+packages = ["src/xgen_edit2docs"]
 
 [tool.hatch.build.targets.wheel.sources]
-"src/edit2docs" = "edit2docs"
+"src/xgen_edit2docs" = "xgen_edit2docs"
 
 # ---------------------------------------------------------------------------
 # Ruff (lint + format)
@@ -134,7 +134,7 @@ line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
 extend-exclude = [
-    "src/edit2docs/core",  # ppt-master fork; lint separately if/when we rewrite
+    "src/xgen_edit2docs/core",  # ppt-master fork; lint separately if/when we rewrite
 ]
 
 [tool.ruff.lint]
@@ -172,9 +172,9 @@ markers = [
 # ---------------------------------------------------------------------------
 
 [tool.pyright]
-include = ["src/edit2docs", "tests"]
+include = ["src/xgen_edit2docs", "tests"]
 exclude = [
-    "src/edit2docs/core",  # ppt-master fork has its own conventions
+    "src/xgen_edit2docs/core",  # ppt-master fork has its own conventions
     "**/__pycache__",
     ".venv",
 ]

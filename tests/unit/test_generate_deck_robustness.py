@@ -16,8 +16,8 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from edit2docs.llm.anthropic_client import LLMResult, LLMUsage
-from edit2docs.tools import (
+from xgen_edit2docs.llm.anthropic_client import LLMResult, LLMUsage
+from xgen_edit2docs.tools import (
     ConvertRequest,
     ConvertResponse,
     CostBreakdown,
@@ -28,7 +28,7 @@ from edit2docs.tools import (
     StrategizeResponse,
     execute_batch,
 )
-from edit2docs.tools.generate_deck import GenerateDeckRequest, generate_deck, _split_page_plan
+from xgen_edit2docs.tools.generate_deck import GenerateDeckRequest, generate_deck, _split_page_plan
 
 
 # ---------------------------------------------------------------------------
@@ -484,7 +484,7 @@ class _RetryingExecuteBatchStub:
 
 class TestQualityRetry:
     def setup_method(self):
-        self.gd = sys.modules["edit2docs.tools.generate_deck"]
+        self.gd = sys.modules["xgen_edit2docs.tools.generate_deck"]
 
     @pytest.mark.asyncio
     async def test_retry_invoked_with_simplification_hint(self, monkeypatch):

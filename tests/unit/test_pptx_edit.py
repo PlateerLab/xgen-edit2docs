@@ -9,7 +9,7 @@ import pytest
 from pptx import Presentation
 from pptx.util import Emu, Inches
 
-from edit2docs.core.svg_to_pptx.pptx_edit import KeepSlide, NewSlide, recompose_pptx
+from xgen_edit2docs.core.svg_to_pptx.pptx_edit import KeepSlide, NewSlide, recompose_pptx
 
 SVG = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">'

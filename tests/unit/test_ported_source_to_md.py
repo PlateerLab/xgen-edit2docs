@@ -23,7 +23,7 @@ def _w_tbl(rows: list[list[str]]) -> ET.Element:
 
 class TestDocxPipeTables:
     def test_table_becomes_pipe_markdown(self):
-        from edit2docs.core.source_to_md.doc_to_md import _docx_table_to_markdown
+        from xgen_edit2docs.core.source_to_md.doc_to_md import _docx_table_to_markdown
 
         md = _docx_table_to_markdown(
             _w_tbl([["Name", "Qty"], ["apple", "3"], ["pear", "7"]])
@@ -36,13 +36,13 @@ class TestDocxPipeTables:
         ]
 
     def test_pipe_in_cell_is_escaped(self):
-        from edit2docs.core.source_to_md.doc_to_md import _docx_table_to_markdown
+        from xgen_edit2docs.core.source_to_md.doc_to_md import _docx_table_to_markdown
 
         md = _docx_table_to_markdown(_w_tbl([["a | b"], ["c"]]))
         assert "a \\| b" in md.splitlines()[0]
 
     def test_ragged_rows_are_padded(self):
-        from edit2docs.core.source_to_md.doc_to_md import _docx_table_to_markdown
+        from xgen_edit2docs.core.source_to_md.doc_to_md import _docx_table_to_markdown
 
         md = _docx_table_to_markdown(_w_tbl([["h1", "h2"], ["only-one"]]))
         assert md.splitlines()[-1] == "| only-one |  |"
@@ -50,7 +50,7 @@ class TestDocxPipeTables:
 
 class TestMammothEscapeTrim:
     def test_safe_punctuation_unescaped(self):
-        from edit2docs.core.source_to_md.doc_to_md import _clean_mammoth_markdown
+        from xgen_edit2docs.core.source_to_md.doc_to_md import _clean_mammoth_markdown
 
         cleaned = _clean_mammoth_markdown(
             r"Version 2\.0 \(beta\), see notes\: done\."
@@ -58,7 +58,7 @@ class TestMammothEscapeTrim:
         assert cleaned == "Version 2.0 (beta), see notes: done."
 
     def test_ordered_list_dot_stays_escaped(self):
-        from edit2docs.core.source_to_md.doc_to_md import _clean_mammoth_markdown
+        from xgen_edit2docs.core.source_to_md.doc_to_md import _clean_mammoth_markdown
 
         # "1\." at line start would otherwise turn into an ordered list item.
         assert _clean_mammoth_markdown("1\\. First") == "1\\. First"
@@ -70,7 +70,7 @@ def _omml(inner: str) -> ET.Element:
 
 class TestOmmlToLatex:
     def test_fraction(self):
-        from edit2docs.core.source_to_md.doc_to_md import _omml_to_latex
+        from xgen_edit2docs.core.source_to_md.doc_to_md import _omml_to_latex
 
         elem = _omml(
             "<m:f>"
@@ -81,7 +81,7 @@ class TestOmmlToLatex:
         assert _omml_to_latex(elem) == r"\frac{a}{b}"
 
     def test_superscript(self):
-        from edit2docs.core.source_to_md.doc_to_md import _omml_to_latex
+        from xgen_edit2docs.core.source_to_md.doc_to_md import _omml_to_latex
 
         elem = _omml(
             "<m:sSup>"
@@ -103,7 +103,7 @@ class _FakeResponse:
 
 class TestWebCharsetDecoding:
     def test_header_charset_wins(self):
-        from edit2docs.core.source_to_md.web_to_md import _decode_response_text
+        from xgen_edit2docs.core.source_to_md.web_to_md import _decode_response_text
 
         text = "中文页面"
         resp = _FakeResponse(
@@ -114,21 +114,21 @@ class TestWebCharsetDecoding:
         assert _decode_response_text(resp) == text
 
     def test_meta_charset_fallback(self):
-        from edit2docs.core.source_to_md.web_to_md import _decode_response_text
+        from xgen_edit2docs.core.source_to_md.web_to_md import _decode_response_text
 
         html = '<html><head><meta charset="gb2312"></head><body>你好世界</body></html>'
         resp = _FakeResponse(html.encode("gb2312"))
         assert "你好世界" in _decode_response_text(resp)
 
     def test_utf8_bom_detected(self):
-        from edit2docs.core.source_to_md.web_to_md import _decode_response_text
+        from xgen_edit2docs.core.source_to_md.web_to_md import _decode_response_text
 
         resp = _FakeResponse("﻿plain".encode("utf-8-sig") or b"")
         resp.content = b"\xef\xbb\xbfplain"
         assert _decode_response_text(resp) == "plain"
 
     def test_guessed_encoding_does_not_override_valid_utf8(self):
-        from edit2docs.core.source_to_md.web_to_md import _decode_response_text
+        from xgen_edit2docs.core.source_to_md.web_to_md import _decode_response_text
 
         # A bogus cp1252 guess would turn curly quotes into "â€œ" mojibake;
         # the decode-quality score must prefer the clean UTF-8 reading.

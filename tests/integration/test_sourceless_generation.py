@@ -15,14 +15,14 @@ from pathlib import Path
 
 import pytest
 
-from edit2docs.llm.anthropic_client import LLMResult, LLMUsage
-from edit2docs.tools import (
+from xgen_edit2docs.llm.anthropic_client import LLMResult, LLMUsage
+from xgen_edit2docs.tools import (
     CostBreakdown,
     ExecuteBatchResponse,
     ExecutePageResponse,
     StrategizeResponse,
 )
-from edit2docs.tools.generate_deck import GenerateDeckRequest, generate_deck
+from xgen_edit2docs.tools.generate_deck import GenerateDeckRequest, generate_deck
 
 KOREAN_SVG = (Path(__file__).resolve().parents[1] / "fixtures" / "korean_slide.svg").read_text(
     encoding="utf-8"
@@ -68,14 +68,14 @@ class _ExecuteStub:
 
 class TestSourceLessGeneration:
     def setup_method(self):
-        self.gd = sys.modules["edit2docs.tools.generate_deck"]
-        self.strat = sys.modules["edit2docs.tools.strategize"]
+        self.gd = sys.modules["xgen_edit2docs.tools.generate_deck"]
+        self.strat = sys.modules["xgen_edit2docs.tools.strategize"]
 
     def _wire(self, monkeypatch, strat_response: str):
         strat_llm = _CapturingLLM(response=strat_response)
 
         async def fake_strategize(req, *, client=None):
-            from edit2docs.tools.strategize import strategize as real_strategize
+            from xgen_edit2docs.tools.strategize import strategize as real_strategize
             return await real_strategize(req, client=strat_llm)
 
         monkeypatch.setattr(self.gd, "strategize", fake_strategize)

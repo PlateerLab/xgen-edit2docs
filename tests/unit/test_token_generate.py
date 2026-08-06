@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from edit2docs.llm.anthropic_client import LLMResult, LLMUsage
+from xgen_edit2docs.llm.anthropic_client import LLMResult, LLMUsage
 
 # ---------------------------------------------------------------------------
 # Shared fixtures / fakes
@@ -101,8 +101,8 @@ class _RecordingClient:
 
 class TestStrategistSourceCap:
     def _build(self, sources, warnings, cap, monkeypatch):
-        from edit2docs.config import reset_settings_cache
-        from edit2docs.tools.strategize import StrategizeRequest, _build_user_message
+        from xgen_edit2docs.config import reset_settings_cache
+        from xgen_edit2docs.tools.strategize import StrategizeRequest, _build_user_message
 
         monkeypatch.setenv("EDIT2DOCS_STRATEGIST_SOURCE_CHAR_CAP", str(cap))
         reset_settings_cache()
@@ -157,7 +157,7 @@ class TestStrategistSourceCap:
 class TestSpecLockInSystemSuffix:
     @pytest.mark.asyncio
     async def test_spec_lock_in_suffix_not_user_message(self):
-        from edit2docs.tools.execute import ExecutePageRequest, execute_page
+        from xgen_edit2docs.tools.execute import ExecutePageRequest, execute_page
 
         client = _RecordingClient()
         req = ExecutePageRequest(
@@ -183,7 +183,7 @@ class TestSpecLockInSystemSuffix:
         assert "MARKER_PAGE_SUMMARY" in call["user_message"]
 
     def test_suffix_builder_wraps_spec_lock(self):
-        from edit2docs.tools.execute import _build_spec_lock_suffix
+        from xgen_edit2docs.tools.execute import _build_spec_lock_suffix
 
         suffix = _build_spec_lock_suffix("key: value\n")
         assert suffix.startswith("## spec_lock")
@@ -198,7 +198,7 @@ class TestSpecLockInSystemSuffix:
 class TestFanOutWarmUp:
     @pytest.mark.asyncio
     async def test_first_page_completes_before_rest_start(self):
-        from edit2docs.tools.execute import (
+        from xgen_edit2docs.tools.execute import (
             ExecuteBatchRequest,
             ExecutePageRequest,
             execute_batch,
@@ -229,7 +229,7 @@ class TestFanOutWarmUp:
 
     @pytest.mark.asyncio
     async def test_single_page_batch_unaffected(self):
-        from edit2docs.tools.execute import (
+        from xgen_edit2docs.tools.execute import (
             ExecuteBatchRequest,
             ExecutePageRequest,
             execute_batch,
@@ -256,7 +256,7 @@ class TestFanOutWarmUp:
 
     @pytest.mark.asyncio
     async def test_warmup_failure_still_fans_out_rest(self):
-        from edit2docs.tools.execute import (
+        from xgen_edit2docs.tools.execute import (
             ExecuteBatchRequest,
             ExecutePageRequest,
             execute_batch,
@@ -309,7 +309,7 @@ class _StubQualityResp:
 
 
 def _promote(warnings):
-    from edit2docs.tools.generate_deck import _promote_layout_violations
+    from xgen_edit2docs.tools.generate_deck import _promote_layout_violations
 
     page = _StubPage(page_index=0, warnings=warnings)
     resp = _StubQualityResp()
@@ -406,7 +406,7 @@ class TestRetrySeverityTiering:
         # the submodule name — fetch the module via sys.modules.
         import sys
 
-        gd = sys.modules["edit2docs.tools.generate_deck"]
+        gd = sys.modules["xgen_edit2docs.tools.generate_deck"]
         assert gd._OVERLAP_PROMOTE_RATIO == 0.5
         assert gd._TEXT_OVERFLOW_PROMOTE_RATIO == 1.15
 
@@ -421,13 +421,13 @@ class TestStageCosts:
     async def test_stage_costs_populated(self, monkeypatch):
         import sys
 
-        from edit2docs.tools.execute import execute_batch
-        from edit2docs.tools.export import ExportResponse
-        from edit2docs.tools.generate_deck import GenerateDeckRequest, generate_deck
-        from edit2docs.tools.strategize import StrategizeResponse
-        from edit2docs.tools.types import CostBreakdown
+        from xgen_edit2docs.tools.execute import execute_batch
+        from xgen_edit2docs.tools.export import ExportResponse
+        from xgen_edit2docs.tools.generate_deck import GenerateDeckRequest, generate_deck
+        from xgen_edit2docs.tools.strategize import StrategizeResponse
+        from xgen_edit2docs.tools.types import CostBreakdown
 
-        gd = sys.modules["edit2docs.tools.generate_deck"]
+        gd = sys.modules["xgen_edit2docs.tools.generate_deck"]
 
         async def fake_strategize(req, *, client=None):
             return StrategizeResponse(

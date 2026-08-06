@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from edit2docs.llm.anthropic_client import LLMResult, LLMUsage
-from edit2docs.tools import (
+from xgen_edit2docs.llm.anthropic_client import LLMResult, LLMUsage
+from xgen_edit2docs.tools import (
     ExecuteBatchRequest,
     ExecutePageRequest,
     StrategizeRequest,

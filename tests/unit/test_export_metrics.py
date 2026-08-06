@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from edit2docs.tools._export_metrics import (
+from xgen_edit2docs.tools._export_metrics import (
     ExportMetrics,
     compute_export_metrics,
 )

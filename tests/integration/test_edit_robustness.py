@@ -23,14 +23,14 @@ import pytest
 from pptx import Presentation
 from pptx.util import Emu, Inches
 
-from edit2docs.llm.anthropic_client import LLMResult, LLMUsage
-from edit2docs.tools.apply_text_edits import (
+from xgen_edit2docs.llm.anthropic_client import LLMResult, LLMUsage
+from xgen_edit2docs.tools.apply_text_edits import (
     ApplyTextEditsRequest,
     TextEdit,
     apply_text_edits,
 )
-from edit2docs.tools.edit_deck import EditDeckRequest, edit_deck
-from edit2docs.tools.render_preview import RenderPreviewRequest, render_preview
+from xgen_edit2docs.tools.edit_deck import EditDeckRequest, edit_deck
+from xgen_edit2docs.tools.render_preview import RenderPreviewRequest, render_preview
 
 NEW_SVG = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">'
@@ -91,7 +91,7 @@ def _deck_bytes(tmp_path: Path, slides: int = 2) -> bytes:
 
 
 def _wire(monkeypatch, llm) -> None:
-    ed = sys.modules["edit2docs.tools.edit_deck"]
+    ed = sys.modules["xgen_edit2docs.tools.edit_deck"]
     monkeypatch.setattr(ed, "AnthropicClient", lambda **kw: llm)
 
 
@@ -134,7 +134,7 @@ class TestPlannerModelTiering:
 
     @pytest.fixture(autouse=True)
     def _clean_settings(self, monkeypatch):
-        from edit2docs.config import reset_settings_cache
+        from xgen_edit2docs.config import reset_settings_cache
 
         monkeypatch.delenv("EDIT2DOCS_MODEL_PLANNER", raising=False)
         reset_settings_cache()
@@ -144,7 +144,7 @@ class TestPlannerModelTiering:
 
     @pytest.mark.asyncio
     async def test_env_override_selects_planner_model(self, monkeypatch, tmp_path):
-        from edit2docs.config import reset_settings_cache
+        from xgen_edit2docs.config import reset_settings_cache
 
         monkeypatch.setenv("EDIT2DOCS_MODEL_PLANNER", "claude-sonnet-5")
         reset_settings_cache()
@@ -159,7 +159,7 @@ class TestPlannerModelTiering:
         _wire(monkeypatch, llm)
         # _request builds an EditDeckRequest whose model defaults to DEFAULT_MODEL.
         await edit_deck(_request(_deck_bytes(tmp_path)))
-        from edit2docs.llm import DEFAULT_MODEL
+        from xgen_edit2docs.llm import DEFAULT_MODEL
 
         assert llm.planner_models[0] == DEFAULT_MODEL
 

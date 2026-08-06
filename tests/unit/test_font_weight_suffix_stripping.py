@@ -15,7 +15,7 @@ legitimate family names (`Arial Black`, `Helvetica Neue Light`).
 
 from __future__ import annotations
 
-from edit2docs.core.svg_to_pptx.drawingml_utils import (
+from xgen_edit2docs.core.svg_to_pptx.drawingml_utils import (
     _strip_weight_suffix,
     parse_font_family,
 )

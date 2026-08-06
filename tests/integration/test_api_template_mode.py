@@ -16,12 +16,12 @@ import pytest_asyncio
 from httpx import ASGITransport
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from edit2docs.api import dependencies as deps
-from edit2docs.api.main import app
-from edit2docs.db.models import Base
-from edit2docs.services import jobs as jobs_service
-from edit2docs.services.jobs import FakeJobBus
-from edit2docs.storage import InMemoryStorage
+from xgen_edit2docs.api import dependencies as deps
+from xgen_edit2docs.api.main import app
+from xgen_edit2docs.db.models import Base
+from xgen_edit2docs.services import jobs as jobs_service
+from xgen_edit2docs.services.jobs import FakeJobBus
+from xgen_edit2docs.storage import InMemoryStorage
 
 
 @pytest_asyncio.fixture
@@ -104,7 +104,7 @@ class TestDeckModeValidation:
     @pytest.mark.asyncio
     async def test_template_asset_defaults_mode_to_restyle(self, client, monkeypatch):
         # Block inline execution: this test asserts enqueue-time params only.
-        import edit2docs.api.routes.jobs as jobs_route
+        import xgen_edit2docs.api.routes.jobs as jobs_route
 
         async def _noop_run_inline(job_id):
             return None
@@ -124,7 +124,7 @@ class TestDeckModeValidation:
 
     @pytest.mark.asyncio
     async def test_plain_new_mode_keeps_null_template(self, client, monkeypatch):
-        import edit2docs.api.routes.jobs as jobs_route
+        import xgen_edit2docs.api.routes.jobs as jobs_route
 
         async def _noop_run_inline(job_id):
             return None

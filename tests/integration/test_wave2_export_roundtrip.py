@@ -35,8 +35,8 @@ SMOKE_SVG = (
 
 
 def test_export_and_preview_roundtrip(tmp_path: Path):
-    from edit2docs.core.svg_to_pptx.pptx_builder import create_pptx_with_native_svg
-    from edit2docs.tools.render_preview import RenderPreviewRequest, render_preview
+    from xgen_edit2docs.core.svg_to_pptx.pptx_builder import create_pptx_with_native_svg
+    from xgen_edit2docs.tools.render_preview import RenderPreviewRequest, render_preview
 
     svg = tmp_path / "slide_00.svg"
     svg.write_text(SMOKE_SVG, encoding="utf-8")

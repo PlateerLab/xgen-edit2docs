@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from xml.etree import ElementTree as ET
 
-from edit2docs.core.svg_to_pptx.layout_repair import (
+from xgen_edit2docs.core.svg_to_pptx.layout_repair import (
     DEFAULT_CANVAS,
     LayoutViolation,
     repair_layout,

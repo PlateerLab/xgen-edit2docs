@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from edit2docs.llm import load_prompt
+from xgen_edit2docs.llm import load_prompt
 
 
 class TestImageGeneratorKoreanAppendix:

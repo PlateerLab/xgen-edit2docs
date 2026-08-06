@@ -28,7 +28,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport
 
-from edit2docs.config import get_settings, reset_settings_cache
+from xgen_edit2docs.config import get_settings, reset_settings_cache
 
 
 @pytest_asyncio.fixture
@@ -54,13 +54,13 @@ async def standalone_env(tmp_path, monkeypatch):
 
     # Reset the db_session + storage caches so each test gets a fresh
     # engine bound to the new SQLite URL.
-    from edit2docs.db import session as session_mod
-    from edit2docs.storage import set_default_storage
+    from xgen_edit2docs.db import session as session_mod
+    from xgen_edit2docs.storage import set_default_storage
 
     session_mod.reset_engine_cache()
     set_default_storage(None)
     # Drop any cached default storage instance from a prior test run.
-    from edit2docs.storage import get_default_storage
+    from xgen_edit2docs.storage import get_default_storage
 
     if hasattr(get_default_storage, "_instance"):
         delattr(get_default_storage, "_instance")
@@ -77,11 +77,11 @@ async def standalone_env(tmp_path, monkeypatch):
 async def app(standalone_env):
     """Import the FastAPI app *after* the env vars are in place so the
     lifespan picks up the standalone settings."""
-    # Importing late is critical — `from edit2docs.api.main import app` reads
+    # Importing late is critical — `from xgen_edit2docs.api.main import app` reads
     # get_settings() at import time only inside lifespan, but the storage
     # default-getter resolves lazily, so an early import would have been
     # OK too. Keep the late import for clarity.
-    from edit2docs.api.main import app  # noqa: PLC0415
+    from xgen_edit2docs.api.main import app  # noqa: PLC0415
 
     return app
 
@@ -110,11 +110,11 @@ class TestBootstrap:
 
     @pytest.mark.asyncio
     async def test_sqlite_file_created_with_tables(self, client, standalone_env):
-        sqlite_path = standalone_env.data_dir / "edit2docs.db"
+        sqlite_path = standalone_env.data_dir / "xgen_edit2docs.db"
         assert sqlite_path.exists()
 
         # All six tables present.
-        from edit2docs.db.session import get_engine
+        from xgen_edit2docs.db.session import get_engine
         from sqlalchemy import inspect
 
         engine = get_engine()

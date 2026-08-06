@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from xml.etree import ElementTree as ET
 
-from edit2docs.core.svg_to_pptx.drawingml_converter import (
+from xgen_edit2docs.core.svg_to_pptx.drawingml_converter import (
     _autogen_top_level_group_ids,
 )
 

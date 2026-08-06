@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from edit2docs.documents.docx_engine import (
+from xgen_edit2docs.documents.docx_engine import (
     DocxEdit,
     apply_docx_edits,
     docx_from_markdown,
     docx_outline,
     docx_to_markdown,
 )
-from edit2docs.documents.xlsx_engine import (
+from xgen_edit2docs.documents.xlsx_engine import (
     XlsxEdit,
     apply_xlsx_edits,
     xlsx_from_spec,
@@ -224,7 +224,7 @@ class TestReviewRegressions:
         assert any(e.get("table") == 0 and e["text"] == "v" for e in outline)
 
     def test_docx_to_html_neutralizes_javascript_hrefs(self):
-        from edit2docs.documents.docx_engine import _sanitize_preview_html
+        from xgen_edit2docs.documents.docx_engine import _sanitize_preview_html
 
         dirty = '<p><a href="javascript:alert(1)">x</a> <a href="https://ok.com">y</a></p>'
         clean = _sanitize_preview_html(dirty)

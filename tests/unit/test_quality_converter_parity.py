@@ -12,7 +12,7 @@ reject, with a machine-readable code, so the per-page retry loop in
 
 from __future__ import annotations
 
-from edit2docs.tools.quality import check_svg_quality, QualityCheckRequest, QualitySlide
+from xgen_edit2docs.tools.quality import check_svg_quality, QualityCheckRequest, QualitySlide
 
 
 def _resp(svg: str):

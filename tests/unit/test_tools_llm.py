@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from edit2docs.llm.anthropic_client import LLMResult, LLMUsage
-from edit2docs.tools import (
+from xgen_edit2docs.llm.anthropic_client import LLMResult, LLMUsage
+from xgen_edit2docs.tools import (
     ConvertRequest,
     ExecuteBatchRequest,
     ExecutePageRequest,
@@ -21,7 +21,7 @@ from edit2docs.tools import (
     execute_batch,
     strategize,
 )
-from edit2docs.tools.generate_deck import GenerateDeckRequest, generate_deck
+from xgen_edit2docs.tools.generate_deck import GenerateDeckRequest, generate_deck
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "korean_slide.svg"
 KOREAN_SVG = FIXTURE.read_text(encoding="utf-8")
@@ -258,7 +258,7 @@ class TestGenerateDeckPipeline:
     @pytest.mark.asyncio
     async def test_pipeline_with_mocked_llm_and_html_source(self, monkeypatch):
         # Make convert_to_markdown a no-op stub so we don't need mammoth.
-        from edit2docs.tools import convert as convert_module
+        from xgen_edit2docs.tools import convert as convert_module
 
         def _fake_convert(req):
             return convert_module.ConvertResponse(
@@ -274,7 +274,7 @@ class TestGenerateDeckPipeline:
         # the submodule attribute. Fetch the actual module via sys.modules to
         # patch its import-time reference to convert_to_markdown.
         import sys
-        gd = sys.modules["edit2docs.tools.generate_deck"]
+        gd = sys.modules["xgen_edit2docs.tools.generate_deck"]
         monkeypatch.setattr(gd, "convert_to_markdown", _fake_convert)
 
         # Stub LLM client: strategize call yields plan, then execute calls yield SVGs.
@@ -294,7 +294,7 @@ class TestGenerateDeckPipeline:
             ]
         )
         # Inject our stub by patching the AnthropicClient construction inside generate_deck.
-        from edit2docs.llm import anthropic_client
+        from xgen_edit2docs.llm import anthropic_client
 
         monkeypatch.setattr(
             anthropic_client,

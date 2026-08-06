@@ -11,7 +11,7 @@ downstream section, including §IX Content Outline.
 
 from __future__ import annotations
 
-from edit2docs.tools.strategize import _split_output
+from xgen_edit2docs.tools.strategize import _split_output
 
 
 def test_basic_two_block_extraction():

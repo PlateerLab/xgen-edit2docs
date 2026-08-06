@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from edit2docs.tools.execute import _normalise_image_refs
+from xgen_edit2docs.tools.execute import _normalise_image_refs
 
 
 @dataclass

@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from edit2docs.tools import (
+from xgen_edit2docs.tools import (
     ConvertRequest,
     ConvertResponse,
     CostBreakdown,
@@ -30,7 +30,7 @@ from edit2docs.tools import (
     NarrateSlideAudio,
     StrategizeResponse,
 )
-from edit2docs.tools.generate_deck import GenerateDeckRequest, generate_deck
+from xgen_edit2docs.tools.generate_deck import GenerateDeckRequest, generate_deck
 
 KOREAN_SVG = (Path(__file__).resolve().parents[1] / "fixtures" / "korean_slide.svg").read_text(
     encoding="utf-8"
@@ -100,8 +100,8 @@ class _NarrateStub:
 
 class TestNarrationPipeline:
     def setup_method(self):
-        self.gd = sys.modules["edit2docs.tools.generate_deck"]
-        import edit2docs.tools.convert as convert_module
+        self.gd = sys.modules["xgen_edit2docs.tools.generate_deck"]
+        import xgen_edit2docs.tools.convert as convert_module
         self.convert_module = convert_module
 
     def _wire_pipeline(self, monkeypatch, narrate_stub: _NarrateStub):

@@ -34,8 +34,8 @@ CHART_MARKER_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 
 
 
 def test_native_chart_export_preview_roundtrip():
-    from edit2docs.tools.export import ExportRequest, SlideInput, export_pptx
-    from edit2docs.tools.render_preview import RenderPreviewRequest, render_preview
+    from xgen_edit2docs.tools.export import ExportRequest, SlideInput, export_pptx
+    from xgen_edit2docs.tools.render_preview import RenderPreviewRequest, render_preview
 
     resp = export_pptx(
         ExportRequest(

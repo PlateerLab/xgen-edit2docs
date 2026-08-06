@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from xml.etree import ElementTree as ET
 
-from edit2docs.core.svg_to_pptx.use_href_expander import expand_use_href
+from xgen_edit2docs.core.svg_to_pptx.use_href_expander import expand_use_href
 
 SVG = "http://www.w3.org/2000/svg"
 
@@ -163,7 +163,7 @@ def test_use_x_y_zero_does_not_emit_transform():
 def test_drawingml_converter_accepts_use_now(tmp_path):
     """End-to-end: an SVG with a real <use href> survives the converter's
     unsupported-element check after expansion."""
-    from edit2docs.core.svg_to_pptx.drawingml_converter import (
+    from xgen_edit2docs.core.svg_to_pptx.drawingml_converter import (
         convert_svg_to_slide_shapes,
     )
 

@@ -14,7 +14,7 @@ duplicates of the canonical palette.
 
 from __future__ import annotations
 
-from edit2docs.tools.execute import (
+from xgen_edit2docs.tools.execute import (
     _hex_to_rgb,
     _palette_from_spec_lock,
     _quantize_colors_to_palette,

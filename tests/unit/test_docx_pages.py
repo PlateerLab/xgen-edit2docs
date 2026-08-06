@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from edit2docs.documents.docx_engine import docx_from_markdown
-from edit2docs.documents.docx_pages import docx_to_page_svgs
+from xgen_edit2docs.documents.docx_engine import docx_from_markdown
+from xgen_edit2docs.documents.docx_pages import docx_to_page_svgs
 
 
 def _doc(md: str) -> bytes:

@@ -21,13 +21,13 @@ import pytest
 from pptx import Presentation
 from pptx.util import Emu, Inches
 
-from edit2docs.llm.anthropic_client import LLMResult, LLMUsage
-from edit2docs.tools import (
+from xgen_edit2docs.llm.anthropic_client import LLMResult, LLMUsage
+from xgen_edit2docs.tools import (
     CostBreakdown,
     ExecuteBatchResponse,
     ExecutePageResponse,
 )
-from edit2docs.tools.generate_deck import GenerateDeckRequest, generate_deck
+from xgen_edit2docs.tools.generate_deck import GenerateDeckRequest, generate_deck
 
 KOREAN_SVG = (Path(__file__).resolve().parents[1] / "fixtures" / "korean_slide.svg").read_text(
     encoding="utf-8"
@@ -92,13 +92,13 @@ def _host_pptx_bytes(tmp_path: Path) -> bytes:
 
 class TestTemplateModeGeneration:
     def setup_method(self):
-        self.gd = sys.modules["edit2docs.tools.generate_deck"]
+        self.gd = sys.modules["xgen_edit2docs.tools.generate_deck"]
 
     def _wire(self, monkeypatch):
         strat_llm = _CapturingLLM(response=STRAT_RESPONSE)
 
         async def fake_strategize(req, *, client=None):
-            from edit2docs.tools.strategize import strategize as real_strategize
+            from xgen_edit2docs.tools.strategize import strategize as real_strategize
 
             return await real_strategize(req, client=strat_llm)
 

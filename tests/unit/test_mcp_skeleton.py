@@ -13,8 +13,8 @@ import pytest
 
 from mcp.server.fastmcp import FastMCP
 
-from edit2docs.mcp import build_mcp_server
-from edit2docs.mcp.catalog import list_templates, list_voices
+from xgen_edit2docs.mcp import build_mcp_server
+from xgen_edit2docs.mcp.catalog import list_templates, list_voices
 
 
 # ---------------------------------------------------------------------------
@@ -87,7 +87,7 @@ class TestMCPServer:
         result = await server.call_tool("hello", {})
         # FastMCP returns (content_list, structured_dict) in 1.x.
         contents, structured = result
-        assert structured["service"] == "edit2docs"
+        assert structured["service"] == "xgen_edit2docs"
         assert structured["ok"] is True
         assert "hello" in structured["tools"]
 

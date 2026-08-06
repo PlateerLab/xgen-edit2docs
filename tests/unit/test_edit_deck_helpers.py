@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from edit2docs.tools.edit_deck import (
+from xgen_edit2docs.tools.edit_deck import (
     _extract_slide_text,
     _extract_svg_block,
     _parse_plan,

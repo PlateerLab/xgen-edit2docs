@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from edit2docs.core.config import DEFAULT_FONT_STACKS, default_font_stack
-from edit2docs.core.svg_to_pptx.drawingml_utils import (
+from xgen_edit2docs.core.config import DEFAULT_FONT_STACKS, default_font_stack
+from xgen_edit2docs.core.svg_to_pptx.drawingml_utils import (
     EA_FONTS,
     FONT_FALLBACK_WIN,
     detect_lang,
@@ -142,21 +142,21 @@ class TestG3KoreanFontFallback:
 
 class TestOoxmlLangPropagation:
     def test_notes_slide_uses_detected_lang(self):
-        from edit2docs.core.svg_to_pptx.pptx_notes import create_notes_slide_xml
+        from xgen_edit2docs.core.svg_to_pptx.pptx_notes import create_notes_slide_xml
 
         xml = create_notes_slide_xml(slide_num=1, notes_text="안녕하세요, 발표자 노트입니다.")
         assert 'lang="ko-KR"' in xml
         assert 'lang="zh-CN"' not in xml
 
     def test_notes_slide_respects_explicit_lang(self):
-        from edit2docs.core.svg_to_pptx.pptx_notes import create_notes_slide_xml
+        from xgen_edit2docs.core.svg_to_pptx.pptx_notes import create_notes_slide_xml
 
         xml = create_notes_slide_xml(slide_num=1, notes_text="Hello", lang="ko-KR")
         # Explicit ko-KR even though text is English.
         assert 'lang="ko-KR"' in xml
 
     def test_notes_slide_english_default(self):
-        from edit2docs.core.svg_to_pptx.pptx_notes import create_notes_slide_xml
+        from xgen_edit2docs.core.svg_to_pptx.pptx_notes import create_notes_slide_xml
 
         xml = create_notes_slide_xml(slide_num=1, notes_text="Plain English note.")
         assert 'lang="en-US"' in xml

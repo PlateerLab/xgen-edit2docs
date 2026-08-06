@@ -14,7 +14,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport
 
-from edit2docs.api.main import app
+from xgen_edit2docs.api.main import app
 
 
 class TestRoutesMounted:

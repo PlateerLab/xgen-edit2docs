@@ -14,7 +14,7 @@ import pytest
 
 
 def _build_slide_xml(svg: str, tmp_path: Path) -> str:
-    from edit2docs.core.svg_to_pptx.drawingml_converter import (
+    from xgen_edit2docs.core.svg_to_pptx.drawingml_converter import (
         convert_svg_to_slide_shapes,
     )
 

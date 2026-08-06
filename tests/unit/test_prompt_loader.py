@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from edit2docs.llm import (
+from xgen_edit2docs.llm import (
     KNOWN_ROLES,
     build_output_lang_directive,
     list_available_prompts,
     load_prompt,
 )
-from edit2docs.llm.prompt_loader import PROMPTS_DIR
+from xgen_edit2docs.llm.prompt_loader import PROMPTS_DIR
 
 
 # ---------------------------------------------------------------------------

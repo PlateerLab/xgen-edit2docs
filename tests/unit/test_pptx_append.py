@@ -10,7 +10,7 @@ import pytest
 from pptx import Presentation
 from pptx.util import Emu, Inches
 
-from edit2docs.core.svg_to_pptx.pptx_append import (
+from xgen_edit2docs.core.svg_to_pptx.pptx_append import (
     AppendError,
     _next_free_slide_number,
     _next_free_sld_id,

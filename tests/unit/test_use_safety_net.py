@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from edit2docs.core.svg_to_pptx.use_safety_net import strip_orphan_uses
+from xgen_edit2docs.core.svg_to_pptx.use_safety_net import strip_orphan_uses
 
 SVG = "http://www.w3.org/2000/svg"
 
@@ -84,7 +84,7 @@ def test_converter_no_longer_raises_on_unresolvable_use(tmp_path):
     unresolvable <use> now that the safety net runs before the
     unsupported-element check. Regression for the production failure
     where a single bad <use> on slide_00 crashed the whole deck."""
-    from edit2docs.core.svg_to_pptx.drawingml_converter import (
+    from xgen_edit2docs.core.svg_to_pptx.drawingml_converter import (
         convert_svg_to_slide_shapes,
     )
 

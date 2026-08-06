@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
   <rect x="0" y="0" width="1920" height="1080" fill="#ffffff"/>
-  <text x="120" y="220" font-family="Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="72" font-weight="700" fill="#1a1a1a">edit2docs 한국어 테스트</text>
+  <text x="120" y="220" font-family="Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="72" font-weight="700" fill="#1a1a1a">xgen_edit2docs 한국어 테스트</text>
   <text x="120" y="320" font-family="Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="32" font-weight="400" fill="#444444">한글 텍스트가 OOXML lang="ko-KR" 로 올바르게 마킹되는지 검증</text>
   <text x="120" y="520" font-family="Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="24" font-weight="400" fill="#666666">• G1: is_cjk_char()에 Hangul 범위 포함</text>
   <text x="120" y="570" font-family="Pretendard, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" font-size="24" font-weight="400" fill="#666666">• G2: lang="zh-CN" 하드코딩 제거, 동적 감지</text>

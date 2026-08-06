@@ -15,21 +15,21 @@ from __future__ import annotations
 import zipfile
 from pathlib import Path
 
-from edit2docs.core.svg_to_pptx.drawingml_utils import (
+from xgen_edit2docs.core.svg_to_pptx.drawingml_utils import (
     parse_hex_color,
     parse_inline_style,
     parse_svg_length,
 )
-from edit2docs.core.svg_to_pptx.drawingml_elements import (
+from xgen_edit2docs.core.svg_to_pptx.drawingml_elements import (
     _build_run_xml,
     _estimate_run_text_width,
     _parse_letter_spacing_px,
 )
-from edit2docs.core.svg_to_pptx.pptx_builder import (
+from xgen_edit2docs.core.svg_to_pptx.pptx_builder import (
     _verify_internal_rels_targets,
     create_pptx_with_native_svg,
 )
-from edit2docs.core.svg_to_pptx.pptx_dimensions import get_viewbox_dimensions
+from xgen_edit2docs.core.svg_to_pptx.pptx_dimensions import get_viewbox_dimensions
 
 
 # ---------------------------------------------------------------------------
@@ -165,7 +165,7 @@ class TestPowerPointCompatPackage:
 
 class TestCheckerHslPaint:
     def _check(self, tmp_path: Path, svg_text: str):
-        from edit2docs.core.svg_quality_checker import SVGQualityChecker
+        from xgen_edit2docs.core.svg_quality_checker import SVGQualityChecker
 
         svg = tmp_path / "page.svg"
         svg.write_text(svg_text, encoding="utf-8")

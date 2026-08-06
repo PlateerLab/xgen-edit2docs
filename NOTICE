@@ -1,12 +1,12 @@
-edit2docs
-Copyright 2026 JangHaryeom (CocoRoF) and edit2docs contributors
+xgen_edit2docs
+Copyright 2026 JangHaryeom (CocoRoF) and xgen_edit2docs contributors
 
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 
 This product includes software derived from ppt-master
 (https://github.com/hugohe3/ppt-master), Copyright (c) 2025-2026 Hugo He,
 licensed under the MIT License. The portions derived from ppt-master live
-under src/edit2docs/core/ and retain their original MIT terms — see
+under src/xgen_edit2docs/core/ and retain their original MIT terms — see
 LICENSE.ppt-master.MIT for the full text.
 
 The PPTX pipeline lineage passes through edit2ppt

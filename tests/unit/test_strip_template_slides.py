@@ -17,7 +17,7 @@ truncation to spec_lock's `pages_total`.
 
 from __future__ import annotations
 
-from edit2docs.tools.generate_deck import (
+from xgen_edit2docs.tools.generate_deck import (
     _consecutive_run_starting_at_one,
     _expected_page_count,
 )
@@ -137,7 +137,7 @@ def test_deck_4_template_references_filtered_out():
     """Build a minimal design_spec mirroring the failing case (chart
     template references in §VII, real outline in §IX) and verify the
     extracted pages start with the actual P01 cover."""
-    from edit2docs.tools.generate_deck import _split_page_plan
+    from xgen_edit2docs.tools.generate_deck import _split_page_plan
 
     design_spec = (
         "## VII. Visualization Reference List\n"

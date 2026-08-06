@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from edit2docs.llm.anthropic_client import LLMUsage, build_create_kwargs
+from xgen_edit2docs.llm.anthropic_client import LLMUsage, build_create_kwargs
 
 
 def _system_blocks(kw):
@@ -156,7 +156,7 @@ class TestUsageAccounting:
 
 class TestModelTiering:
     def test_resolve_model_defaults_to_requested(self, monkeypatch):
-        from edit2docs.config import reset_settings_cache, resolve_model
+        from xgen_edit2docs.config import reset_settings_cache, resolve_model
 
         for k in ("EDIT2DOCS_MODEL_PLANNER", "EDIT2DOCS_MODEL_EXECUTOR"):
             monkeypatch.delenv(k, raising=False)
@@ -164,7 +164,7 @@ class TestModelTiering:
         assert resolve_model("planner", "claude-opus-4-7") == "claude-opus-4-7"
 
     def test_env_override_applies_per_role(self, monkeypatch):
-        from edit2docs.config import reset_settings_cache, resolve_model
+        from xgen_edit2docs.config import reset_settings_cache, resolve_model
 
         monkeypatch.setenv("EDIT2DOCS_MODEL_PLANNER", "claude-sonnet-5")
         reset_settings_cache()

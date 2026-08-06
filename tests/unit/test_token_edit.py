@@ -20,11 +20,11 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from edit2docs.config import reset_settings_cache
-from edit2docs.documents.docx_engine import docx_from_markdown, docx_outline
-from edit2docs.llm import DEFAULT_MODEL
-from edit2docs.llm.anthropic_client import LLMResult, LLMUsage
-from edit2docs.tools.edit_doc import EditDocRequest, _outline_context, edit_document
+from xgen_edit2docs.config import reset_settings_cache
+from xgen_edit2docs.documents.docx_engine import docx_from_markdown, docx_outline
+from xgen_edit2docs.llm import DEFAULT_MODEL
+from xgen_edit2docs.llm.anthropic_client import LLMResult, LLMUsage
+from xgen_edit2docs.tools.edit_doc import EditDocRequest, _outline_context, edit_document
 
 
 @dataclass
@@ -53,7 +53,7 @@ class _RecordingLLM:
 
 
 def _wire(monkeypatch, llm) -> None:
-    module = sys.modules["edit2docs.tools.edit_doc"]
+    module = sys.modules["xgen_edit2docs.tools.edit_doc"]
     monkeypatch.setattr(module, "AnthropicClient", lambda **kw: llm)
 
 

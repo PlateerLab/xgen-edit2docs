@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from edit2docs.tools.generate_deck import (
+from xgen_edit2docs.tools.generate_deck import (
     _build_retry_hint,
     _format_layout_violation_message,
     _promote_layout_violations,

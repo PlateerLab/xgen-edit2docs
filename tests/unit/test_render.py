@@ -12,15 +12,15 @@ import zipfile
 
 import pytest
 
-from edit2docs import render_doc
-from edit2docs.render import (
+from xgen_edit2docs import render_doc
+from xgen_edit2docs.render import (
     FontResolver,
     default_font_resolver,
     svg_to_png,
     svgs_to_pdf,
     svgs_to_pngs,
 )
-from edit2docs.render.fonts import _heuristic_width
+from xgen_edit2docs.render.fonts import _heuristic_width
 
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
@@ -120,7 +120,7 @@ class TestRenderDoc:
         assert "<svg" in result.paths[0].read_text(encoding="utf-8")
 
     def test_docx_renders_pages(self, tmp_path):
-        from edit2docs.documents.docx_engine import docx_from_markdown
+        from xgen_edit2docs.documents.docx_engine import docx_from_markdown
 
         p = tmp_path / "d.docx"
         p.write_bytes(docx_from_markdown("# hi\n\nbody text"))
@@ -129,7 +129,7 @@ class TestRenderDoc:
         assert result.paths[0].read_bytes().startswith(PNG_MAGIC)
 
     def test_xlsx_renders_pages(self, tmp_path):
-        from edit2docs.documents.xlsx_engine import xlsx_from_spec
+        from xgen_edit2docs.documents.xlsx_engine import xlsx_from_spec
 
         p = tmp_path / "b.xlsx"
         p.write_bytes(xlsx_from_spec({"sheets": [{"name": "S", "headers": ["a"], "rows": [[1]]}]}))

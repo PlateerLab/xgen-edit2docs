@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from edit2docs.i18n import (
+from xgen_edit2docs.i18n import (
     DEFAULT_LOCALE,
     FALLBACK_LOCALE,
     MessageCatalog,

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from edit2docs.tools.generate_deck import _build_retry_hint
+from xgen_edit2docs.tools.generate_deck import _build_retry_hint
 
 
 @dataclass

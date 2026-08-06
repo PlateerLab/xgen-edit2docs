@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from xml.etree import ElementTree as ET
 
-from edit2docs.core.svg_to_pptx.svg_scale import scale_svg_to_viewbox
+from xgen_edit2docs.core.svg_to_pptx.svg_scale import scale_svg_to_viewbox
 
 SVG_NS = "http://www.w3.org/2000/svg"
 

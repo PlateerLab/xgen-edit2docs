@@ -21,8 +21,8 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from edit2docs.llm.anthropic_client import LLMResult, LLMUsage
-from edit2docs.tools.types import WarningEntry
+from xgen_edit2docs.llm.anthropic_client import LLMResult, LLMUsage
+from xgen_edit2docs.tools.types import WarningEntry
 
 
 # ---------------------------------------------------------------------------
@@ -171,13 +171,13 @@ class _PageScriptedLLM:
 async def test_exhausted_page_emits_warning_code(monkeypatch):
     """When a single page exhausts its per-page cap, an
     `retry_per_page_cap_reached` warning is emitted on the response."""
-    from edit2docs.tools.execute import execute_batch
-    from edit2docs.tools.generate_deck import GenerateDeckRequest, generate_deck
+    from xgen_edit2docs.tools.execute import execute_batch
+    from xgen_edit2docs.tools.generate_deck import GenerateDeckRequest, generate_deck
 
     # Patch strategize so we control the spec_lock/design_spec.
-    from edit2docs.tools import strategize as strategize_mod
-    from edit2docs.tools.strategize import StrategizeResponse
-    from edit2docs.tools.types import CostBreakdown
+    from xgen_edit2docs.tools import strategize as strategize_mod
+    from xgen_edit2docs.tools.strategize import StrategizeResponse
+    from xgen_edit2docs.tools.types import CostBreakdown
 
     async def fake_strategize(req, *, client=None):
         return StrategizeResponse(
@@ -199,12 +199,12 @@ async def test_exhausted_page_emits_warning_code(monkeypatch):
         return await execute_batch(req, client=stub_llm)
 
     import sys as _sys
-    gd = _sys.modules["edit2docs.tools.generate_deck"]
+    gd = _sys.modules["xgen_edit2docs.tools.generate_deck"]
     monkeypatch.setattr(gd, "strategize", fake_strategize)
     monkeypatch.setattr(gd, "execute_batch", patched_execute_batch)
 
     # Skip the export stage — we only care about the retry bookkeeping.
-    from edit2docs.tools.export import ExportResponse
+    from xgen_edit2docs.tools.export import ExportResponse
 
     def fake_export(req):
         return ExportResponse(

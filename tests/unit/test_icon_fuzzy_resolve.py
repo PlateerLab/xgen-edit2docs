@@ -13,12 +13,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from edit2docs.core.svg_to_pptx.use_expander import _fuzzy_resolve
+from xgen_edit2docs.core.svg_to_pptx.use_expander import _fuzzy_resolve
 
 
 ICONS_DIR = (
     Path(__file__).resolve().parents[2]
-    / "src" / "edit2docs" / "core" / "templates" / "icons"
+    / "src" / "xgen_edit2docs" / "core" / "templates" / "icons"
 )
 
 

@@ -1,26 +1,26 @@
-# edit2docs
+# xgen_edit2docs
 
 **AI 에이전트 네이티브 문서 엔진 — DOCX · XLSX · PPTX. English-first, 한국어는 완전한 1급 지원.**
 
-[![PyPI](https://img.shields.io/pypi/v/edit2docs)](https://pypi.org/project/edit2docs/)
-[![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://pypi.org/project/edit2docs/)
+[![PyPI](https://img.shields.io/pypi/v/xgen_edit2docs)](https://pypi.org/project/xgen_edit2docs/)
+[![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://pypi.org/project/xgen_edit2docs/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green)](./LICENSE)
 
 [English README](./README.md)
 
-`edit2docs`는 한 줄 의도로 완성된 오피스 문서를 생성하고, 기존 파일을 채팅으로
+`xgen_edit2docs`는 한 줄 의도로 완성된 오피스 문서를 생성하고, 기존 파일을 채팅으로
 편집합니다 — Word 보고서, Excel 워크북, PowerPoint 덱 전부 **네이티브 편집
 가능한 OOXML**로 (진짜 문단, 진짜 셀, 진짜 차트 — 스크린샷이 아니라).
 하나의 엔진, 네 가지 사용 방식: import해서 쓰거나, 에이전트에게 도구로 주거나,
 MCP 클라이언트에 연결하거나, 서비스로 띄우거나.
 
 ```bash
-pip install edit2docs              # 라이브러리 + 에이전트 도구 + 로컬 MCP
-pip install "edit2docs[server]"    # + 호스팅 멀티테넌트 서비스
+pip install xgen_edit2docs              # 라이브러리 + 에이전트 도구 + 로컬 MCP
+pip install "xgen_edit2docs[server]"    # + 호스팅 멀티테넌트 서비스
 ```
 
 ```python
-from edit2docs import generate_doc, edit_doc
+from xgen_edit2docs import generate_doc, edit_doc
 
 generate_doc("3분기 영업 실적 임원 보고", output="deck.pptx", lang="ko-KR")
 r = edit_doc("deck.pptx", "3번 슬라이드 제목을 더 단정적으로 바꿔줘", lang="ko-KR")
@@ -33,14 +33,14 @@ print(r.reply)          # 편집기가 무엇을 바꿨는지 한국어로 설�
 
 | 저장소 | 설명 |
 |---|---|
-| **[edit2docs](https://github.com/CocoRoF/edit2docs)** (이 저장소) | 엔진: 라이브러리 · 에이전트 도구 · MCP · 호스팅 FastAPI 서비스 |
-| **[edit2docs-web](https://github.com/CocoRoF/edit2docs-web)** | 호스팅 서비스용 웹 스튜디오 — 업로드, 생성, 주소화 프리뷰 위 채팅 편집, 편집 영역 실시간 하이라이트, EN/KO UI. Next.js 15 / React 19 / Tailwind |
+| **[xgen_edit2docs](https://github.com/CocoRoF/xgen_edit2docs)** (이 저장소) | 엔진: 라이브러리 · 에이전트 도구 · MCP · 호스팅 FastAPI 서비스 |
+| **[xgen_edit2docs-web](https://github.com/CocoRoF/xgen_edit2docs-web)** | 호스팅 서비스용 웹 스튜디오 — 업로드, 생성, 주소화 프리뷰 위 채팅 편집, 편집 영역 실시간 하이라이트, EN/KO UI. Next.js 15 / React 19 / Tailwind |
 | [ppt-master](https://github.com/hugohe3/ppt-master) | PPTX 코어의 upstream 프로젝트 (MIT) — v3.1까지 동기화됨 |
 | [edit2ppt](https://github.com/CocoRoF/edit2ppt) | 자매 프로젝트; 덱 파이프라인과 호스팅 서비스의 출처 |
 
 엔진 + 스튜디오의 프로덕션 배포 예시는
 [hr_blog2.0](https://github.com/CocoRoF/hr_blog2.0)의 compose 스택에 있습니다 —
-`edit2docs-server/`, `edit2docs-web/` 서비스 디렉토리가 nginx 뒤에 두 컨테이너를
+`xgen_edit2docs-server/`, `xgen_edit2docs-web/` 서비스 디렉토리가 nginx 뒤에 두 컨테이너를
 연결하는 실제 레퍼런스입니다.
 
 ---
@@ -62,7 +62,7 @@ BYOK(`api_key=...` 또는 `ANTHROPIC_API_KEY`)입니다.
 | `edit_chart` | 네이티브 차트의 **데이터·제목** 결정적 편집 — 차트와 임베디드 워크북을 함께 재작성 | — |
 
 **무손실 편집.** 결정적 편집 동사들은
-[contextifier](https://github.com/CocoRoF/Contextifier)의 raw OOXML 레이어
+[xgen_contextifier](https://github.com/CocoRoF/Contextifier)의 raw OOXML 레이어
 위에서 동작합니다: 편집이 수술적이고 건드리지 않은 패키지 파트는 바이트
 단위로 동일하게 유지되므로, 텍스트 편집 한 번이 차트·피벗·스파크라인·인라인
 이미지·수식 캐시를 파괴하는 일이 없습니다. PPTX 채팅 편집(`edit_doc`)도 재생성
@@ -75,7 +75,7 @@ BYOK(`api_key=...` 또는 `ANTHROPIC_API_KEY`)입니다.
 ### 생성 — 출력 확장자가 엔진을 고릅니다
 
 ```python
-from edit2docs import generate_doc
+from xgen_edit2docs import generate_doc
 
 generate_doc("3분기 실적 보고서", output="report.docx", lang="ko-KR")
 generate_doc("분기별 매출 정리", output="sales.xlsx", sources=["raw.pdf"], lang="ko-KR")
@@ -95,7 +95,7 @@ template=None, deck_mode="new", pages=(8, 12), lang="en-US", model=...)` →
 ### 편집 — 채팅 1턴, 나머지는 바이트 동일
 
 ```python
-from edit2docs import edit_doc
+from xgen_edit2docs import edit_doc
 
 r = edit_doc("report.docx", "진행 사항 섹션에 배포 완료 항목을 추가해줘", lang="ko-KR")
 print(r.reply)        # 편집기가 한 일 (요청 언어로)
@@ -115,7 +115,7 @@ r = edit_doc("deck.pptx", "이 문서 내용을 반영해서 3번 슬라이드�
 ### 검사 & 결정적 편집 (LLM 없음, 키 없음)
 
 ```python
-from edit2docs import analyze_doc, set_doc_text, preview_doc, render_doc
+from xgen_edit2docs import analyze_doc, set_doc_text, preview_doc, render_doc
 
 info = analyze_doc("report.docx")
 # {"format": "docx", "outline": [
@@ -148,7 +148,7 @@ render_doc("deck.pptx", to="png", dpi=200)     # resvg 래스터 — LibreOffice
 
 ```python
 import anthropic
-from edit2docs.agent_tools import ANTHROPIC_TOOLS, run_tool
+from xgen_edit2docs.agent_tools import ANTHROPIC_TOOLS, run_tool
 
 client = anthropic.Anthropic()
 msg = client.messages.create(
@@ -166,15 +166,15 @@ for block in msg.content:
 
 ## 3 · 로컬 MCP 서버 (인프라 제로)
 
-`pip install edit2docs`에 로컬 파일 대상 stdio 서버 `edit2docs-mcp`가
+`pip install xgen_edit2docs`에 로컬 파일 대상 stdio 서버 `xgen_edit2docs-mcp`가
 포함됩니다 (일곱 동사 전부):
 
 ```jsonc
 // Claude Desktop / Claude Code / Cursor
 {
   "mcpServers": {
-    "edit2docs": {
-      "command": "edit2docs-mcp",
+    "xgen_edit2docs": {
+      "command": "xgen_edit2docs-mcp",
       "env": { "ANTHROPIC_API_KEY": "sk-ant-..." }   // 생성형 도구만 필요
     }
   }
@@ -189,8 +189,8 @@ PDF로도 렌더링해줘"*.
 ## 4 · 호스팅 서비스
 
 ```bash
-pip install "edit2docs[server]"
-edit2docs serve                    # FastAPI :8000 — 스탠드얼론 모드
+pip install "xgen_edit2docs[server]"
+xgen_edit2docs serve                    # FastAPI :8000 — 스탠드얼론 모드
 ```
 
 스탠드얼론 모드는 **외부 인프라가 전혀 필요 없습니다**: SQLite + 로컬 파일
@@ -216,7 +216,7 @@ Anthropic 키는 **요청별 BYOK**(`X-Anthropic-API-Key` 헤더) — 절대 저
 | 변수 | 기본값 | 비고 |
 |---|---|---|
 | `EDIT2DOCS_DEFAULT_LANG` | `en-US` | `ko-KR`로 설정하면 배포 전체가 한국어 기본 |
-| `EDIT2DOCS_DATA_DIR` | `/data/edit2docs` | 스탠드얼론 SQLite + 파일 스토리지 루트 |
+| `EDIT2DOCS_DATA_DIR` | `/data/xgen_edit2docs` | 스탠드얼론 SQLite + 파일 스토리지 루트 |
 | `EDIT2DOCS_DATABASE_URL` | (sqlite) | 예: `postgresql+asyncpg://...` |
 | `EDIT2DOCS_REDIS_URL` | (인라인 큐) | arq 워커 큐 활성화 |
 | `EDIT2DOCS_S3_*` | (로컬 fs) | S3 호환 스토리지 endpoint / bucket / 키 |
@@ -227,7 +227,7 @@ Anthropic 키는 **요청별 BYOK**(`X-Anthropic-API-Key` 헤더) — 절대 저
 
 ### 웹 스튜디오
 
-[**edit2docs-web**](https://github.com/CocoRoF/edit2docs-web)은 이 서비스의
+[**xgen_edit2docs-web**](https://github.com/CocoRoF/xgen_edit2docs-web)은 이 서비스의
 공식 프론트엔드입니다: 드래그&드롭 업로드, 스테이지별 SSE 진행 표시 생성,
 그리고 채팅이 문서를 고치는 동안 캔버스가 **각 연산이 건드리는 문단/셀/
 슬라이드를 정확히 하이라이트**하는 공동 편집 스튜디오 (프리뷰 HTML의
@@ -301,10 +301,10 @@ treemap / waterfall (chartEx). 품질 체커가 내보내기 전에 마커 페�
 ## 개발
 
 ```bash
-git clone https://github.com/CocoRoF/edit2docs && cd edit2docs
+git clone https://github.com/CocoRoF/xgen_edit2docs && cd xgen_edit2docs
 uv venv .venv && uv pip install -e ".[server,dev]"
 .venv/bin/python -m pytest tests/          # 769개 테스트
-.venv/bin/python -m ruff check src/edit2docs --exclude src/edit2docs/core
+.venv/bin/python -m ruff check src/xgen_edit2docs --exclude src/xgen_edit2docs/core
 ```
 
 ## 버전 이력
@@ -317,12 +317,12 @@ uv venv .venv && uv pip install -e ".[server,dev]"
 | v0.3.0 | 라이브 편집 스트리밍 — 주소화 타겟이 담긴 연산별 SSE 이벤트 |
 | v0.2.x | 멀티포맷 호스팅 API + 전 포맷 하드닝 |
 | **v0.9.0** | **토큰 최적화** — 프롬프트 캐시 재구성(편집 재시도가 캐시 프리픽스를 ~10× 저렴하게 읽음, 실행기 spec_lock 페이지당 재전송 제거), 팬아웃 캐시 웜업, 무제한 입력 캡(전략가 소스·편집 아웃라인 윈도잉), 재시도 심각도 티어링, 역할별 모델 티어링, 스트리밍, 캐시 회계·스테이지별 비용 |
-| v0.8.0 | **무손실 편집** — contextifier raw OOXML 레이어 위: set_doc_text/edit_doc가 차트·이미지·스파크라인·서식·수식 캐시를 파괴하지 않음; PPTX 채팅편집 네이티브 차트/표 보존; 신규 **`edit_chart`** 동사(데이터+제목, 임베디드 워크북 동기화) |
+| v0.8.0 | **무손실 편집** — xgen_contextifier raw OOXML 레이어 위: set_doc_text/edit_doc가 차트·이미지·스파크라인·서식·수식 캐시를 파괴하지 않음; PPTX 채팅편집 네이티브 차트/표 보존; 신규 **`edit_chart`** 동사(데이터+제목, 임베디드 워크북 동기화) |
 | v0.1.0 | 멀티포맷 엔진: DOCX/XLSX/PPTX 핵심 동사 |
 
 ## 라이선스
 
-[Apache-2.0](./LICENSE). `src/edit2docs/core/`의 PPTX 코어는
+[Apache-2.0](./LICENSE). `src/xgen_edit2docs/core/`의 PPTX 코어는
 [ppt-master](https://github.com/hugohe3/ppt-master)(MIT, © Hugo He)에서
 [edit2ppt](https://github.com/CocoRoF/edit2ppt)를 거쳐 파생됐으며 upstream
 v3.1까지 동기화 유지 중입니다. 해당 부분의 원본 MIT 조항은

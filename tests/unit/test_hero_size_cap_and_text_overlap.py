@@ -27,7 +27,7 @@ SVG = "http://www.w3.org/2000/svg"
 
 
 def _build_slide_xml(svg: str, tmp_path: Path) -> str:
-    from edit2docs.core.svg_to_pptx.drawingml_converter import (
+    from xgen_edit2docs.core.svg_to_pptx.drawingml_converter import (
         convert_svg_to_slide_shapes,
     )
 
@@ -95,7 +95,7 @@ def test_chapter_label_inside_title_box_now_flagged_and_shifted():
     """deck_4.pptx slide 10: the chapter label was at (79, 129) inside
     the title box (74, 92, 583×90). Both are <text>; layout_repair
     must shift the smaller text away from the larger."""
-    from edit2docs.core.svg_to_pptx.layout_repair import repair_layout
+    from xgen_edit2docs.core.svg_to_pptx.layout_repair import repair_layout
 
     svg = f"""<svg xmlns="{SVG}" width="1280" height="720" viewBox="0 0 1280 720">
       <rect width="1280" height="720" fill="#fff"/>
@@ -117,7 +117,7 @@ def test_chapter_label_inside_title_box_now_flagged_and_shifted():
 def test_intentional_text_on_card_still_not_flagged():
     """Text contained inside a non-text container (a background card)
     is the legitimate layering pattern — must continue to pass."""
-    from edit2docs.core.svg_to_pptx.layout_repair import repair_layout
+    from xgen_edit2docs.core.svg_to_pptx.layout_repair import repair_layout
 
     svg = f"""<svg xmlns="{SVG}" width="1280" height="720" viewBox="0 0 1280 720">
       <rect width="1280" height="720" fill="#fff"/>
@@ -131,7 +131,7 @@ def test_intentional_text_on_card_still_not_flagged():
 def test_text_in_text_with_no_overlap_not_flagged():
     """Two text elements with disjoint boxes still don't flag — only
     containment between text bodies fires the rule."""
-    from edit2docs.core.svg_to_pptx.layout_repair import repair_layout
+    from xgen_edit2docs.core.svg_to_pptx.layout_repair import repair_layout
 
     svg = f"""<svg xmlns="{SVG}" width="1280" height="720" viewBox="0 0 1280 720">
       <rect width="1280" height="720" fill="#fff"/>

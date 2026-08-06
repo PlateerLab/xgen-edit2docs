@@ -19,10 +19,10 @@ import pytest_asyncio
 from httpx import ASGITransport
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from edit2docs.api import dependencies as deps
-from edit2docs.api.main import app
-from edit2docs.db.models import Base
-from edit2docs.storage import InMemoryStorage
+from xgen_edit2docs.api import dependencies as deps
+from xgen_edit2docs.api.main import app
+from xgen_edit2docs.db.models import Base
+from xgen_edit2docs.storage import InMemoryStorage
 
 
 @pytest_asyncio.fixture

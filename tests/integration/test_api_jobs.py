@@ -28,12 +28,12 @@ import pytest_asyncio
 from httpx import ASGITransport
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from edit2docs.api import dependencies as deps
-from edit2docs.api.main import app
-from edit2docs.db.models import Base, Job
-from edit2docs.services import jobs as jobs_service
-from edit2docs.services.jobs import FakeJobBus
-from edit2docs.storage import InMemoryStorage
+from xgen_edit2docs.api import dependencies as deps
+from xgen_edit2docs.api.main import app
+from xgen_edit2docs.db.models import Base, Job
+from xgen_edit2docs.services import jobs as jobs_service
+from xgen_edit2docs.services.jobs import FakeJobBus
+from xgen_edit2docs.storage import InMemoryStorage
 
 KOREAN_SVG = (Path(__file__).resolve().parents[1] / "fixtures" / "korean_slide.svg").read_text(
     encoding="utf-8"
@@ -102,8 +102,8 @@ def _stub_pipeline(monkeypatch):
     do no LLM / disk work. Used by the generate-deck integration test."""
 
     import sys
-    import edit2docs.tools.convert as convert_module
-    from edit2docs.tools import (
+    import xgen_edit2docs.tools.convert as convert_module
+    from xgen_edit2docs.tools import (
         ConvertResponse,
         CostBreakdown,
         ExecuteBatchResponse,
@@ -113,7 +113,7 @@ def _stub_pipeline(monkeypatch):
 
     # The submodule attribute on the package is shadowed by the re-exported
     # `generate_deck` function. Reach the module through sys.modules instead.
-    gd = sys.modules["edit2docs.tools.generate_deck"]
+    gd = sys.modules["xgen_edit2docs.tools.generate_deck"]
 
     def _fake_convert(req):
         return ConvertResponse(
@@ -263,8 +263,8 @@ class TestGenerateDeckExecutor:
         # Run the executor manually with its own session.
         async with test_db() as session:
             from sqlalchemy import select
-            from edit2docs.workers.executors.generate_deck import run_generate_deck
-            from edit2docs.workers.executors.registry import ExecutionContext
+            from xgen_edit2docs.workers.executors.generate_deck import run_generate_deck
+            from xgen_edit2docs.workers.executors.registry import ExecutionContext
 
             job = (await session.execute(select(Job).where(Job.id == job_id))).scalar_one()
             ctx = ExecutionContext(session=session, bus=test_bus, job=job)
@@ -323,8 +323,8 @@ class TestGenerateDeckExecutor:
 
         async with test_db() as session:
             from sqlalchemy import select
-            from edit2docs.workers.executors.generate_deck import run_generate_deck
-            from edit2docs.workers.executors.registry import ExecutionContext
+            from xgen_edit2docs.workers.executors.generate_deck import run_generate_deck
+            from xgen_edit2docs.workers.executors.registry import ExecutionContext
 
             job = (await session.execute(select(Job).where(Job.id == job_id))).scalar_one()
             await run_generate_deck(

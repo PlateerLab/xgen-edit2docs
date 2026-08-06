@@ -20,7 +20,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from edit2docs.db.models import (
+from xgen_edit2docs.db.models import (
     ApiKey,
     Asset,
     AssetKind,

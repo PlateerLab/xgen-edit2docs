@@ -10,12 +10,12 @@ import pytest
 from pptx import Presentation
 from pptx.util import Emu, Inches
 
-from edit2docs.tools.apply_text_edits import (
+from xgen_edit2docs.tools.apply_text_edits import (
     ApplyTextEditsRequest,
     TextEdit,
     apply_text_edits,
 )
-from edit2docs.tools.render_preview import RenderPreviewRequest, render_preview
+from xgen_edit2docs.tools.render_preview import RenderPreviewRequest, render_preview
 
 
 @pytest.fixture

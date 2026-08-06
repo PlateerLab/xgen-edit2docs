@@ -21,20 +21,20 @@ class TestHslClrHueScale:
     """<a:hslClr> hue is in 1/60000 deg — 21_600_000 spans the full wheel."""
 
     def test_120_degrees_is_green(self):
-        from edit2docs.core.pptx_to_svg.color_resolver import resolve_color
+        from xgen_edit2docs.core.pptx_to_svg.color_resolver import resolve_color
 
         hex_color, alpha = resolve_color(_hsl_elem(hue="7200000"), None)
         assert hex_color == "#00FF00"
         assert alpha == 1.0
 
     def test_240_degrees_is_blue(self):
-        from edit2docs.core.pptx_to_svg.color_resolver import resolve_color
+        from xgen_edit2docs.core.pptx_to_svg.color_resolver import resolve_color
 
         hex_color, _ = resolve_color(_hsl_elem(hue="14400000"), None)
         assert hex_color == "#0000FF"
 
     def test_zero_hue_is_red(self):
-        from edit2docs.core.pptx_to_svg.color_resolver import resolve_color
+        from xgen_edit2docs.core.pptx_to_svg.color_resolver import resolve_color
 
         hex_color, _ = resolve_color(_hsl_elem(hue="0"), None)
         assert hex_color == "#FF0000"
@@ -50,7 +50,7 @@ class TestDefRPrInheritance:
     """Runs without rPr@sz must fall back to pPr/defRPr before the default."""
 
     def test_font_size_from_def_rpr(self):
-        from edit2docs.core.pptx_to_svg.txbody_to_svg import _parse_paragraphs
+        from xgen_edit2docs.core.pptx_to_svg.txbody_to_svg import _parse_paragraphs
 
         body = _tx_body(
             "<a:p>"
@@ -62,7 +62,7 @@ class TestDefRPrInheritance:
         assert paras[0].runs[0].font_size_px == pytest.approx(3200 / 100 * 4 / 3)
 
     def test_rpr_sz_beats_def_rpr(self):
-        from edit2docs.core.pptx_to_svg.txbody_to_svg import _parse_paragraphs
+        from xgen_edit2docs.core.pptx_to_svg.txbody_to_svg import _parse_paragraphs
 
         body = _tx_body(
             "<a:p>"
@@ -74,7 +74,7 @@ class TestDefRPrInheritance:
         assert paras[0].runs[0].font_size_px == pytest.approx(1400 / 100 * 4 / 3)
 
     def test_bold_and_typeface_from_def_rpr(self):
-        from edit2docs.core.pptx_to_svg.txbody_to_svg import _parse_paragraphs
+        from xgen_edit2docs.core.pptx_to_svg.txbody_to_svg import _parse_paragraphs
 
         body = _tx_body(
             "<a:p>"
@@ -87,7 +87,7 @@ class TestDefRPrInheritance:
         assert "Georgia" in run.font_family
 
     def test_default_used_when_no_def_rpr(self):
-        from edit2docs.core.pptx_to_svg.txbody_to_svg import (
+        from xgen_edit2docs.core.pptx_to_svg.txbody_to_svg import (
             DEFAULT_FONT_SIZE_PX,
             _parse_paragraphs,
         )
@@ -101,7 +101,7 @@ class TestTrackedTextWidth:
     """Letter-spacing (rPr@spc) must widen estimated and advance widths."""
 
     def _run(self, spacing: float):
-        from edit2docs.core.pptx_to_svg.txbody_to_svg import TextRun
+        from xgen_edit2docs.core.pptx_to_svg.txbody_to_svg import TextRun
 
         return TextRun(
             text="tracked",
@@ -112,7 +112,7 @@ class TestTrackedTextWidth:
         )
 
     def test_estimate_run_width_includes_tracking(self):
-        from edit2docs.core.pptx_to_svg.txbody_to_svg import _estimate_run_width
+        from xgen_edit2docs.core.pptx_to_svg.txbody_to_svg import _estimate_run_width
 
         plain = _estimate_run_width("tracked", self._run(0.0))
         tracked = _estimate_run_width("tracked", self._run(5.0))
@@ -120,7 +120,7 @@ class TestTrackedTextWidth:
         assert tracked == pytest.approx(plain + 6 * 5.0 * 1.05)
 
     def test_advance_width_skips_tracking_on_first_char(self):
-        from edit2docs.core.pptx_to_svg.txbody_to_svg import (
+        from xgen_edit2docs.core.pptx_to_svg.txbody_to_svg import (
             _advance_width,
             _char_width,
         )

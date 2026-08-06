@@ -1,4 +1,4 @@
-"""Rename Chinese-named directories/files under src/edit2docs/core/templates to English.
+"""Rename Chinese-named directories/files under src/xgen_edit2docs/core/templates to English.
 
 This is a one-shot migration script for the G13 patch documented in
 ppt-master-analysis/03-korean-gaps.md and 06-bilingual-conventions.md.
@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-TEMPLATES_LAYOUTS = REPO_ROOT / "src" / "edit2docs" / "core" / "templates" / "layouts"
+TEMPLATES_LAYOUTS = REPO_ROOT / "src" / "xgen_edit2docs" / "core" / "templates" / "layouts"
 SEARCH_ROOTS = [REPO_ROOT / "src", REPO_ROOT / "tests"]
 
 # Directory renames: old name (Chinese) -> new name (English).

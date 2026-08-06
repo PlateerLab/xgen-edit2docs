@@ -23,10 +23,10 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from edit2docs.db.models import Base
-from edit2docs.mcp import build_mcp_server
-from edit2docs.mcp.context import MCPContext
-from edit2docs.storage import InMemoryStorage
+from xgen_edit2docs.db.models import Base
+from xgen_edit2docs.mcp import build_mcp_server
+from xgen_edit2docs.mcp.context import MCPContext
+from xgen_edit2docs.storage import InMemoryStorage
 
 KOREAN_SVG = (Path(__file__).resolve().parents[1] / "fixtures" / "korean_slide.svg").read_text(
     encoding="utf-8"
@@ -60,8 +60,8 @@ def stubbed_pipeline(monkeypatch):
     Mirrors the M3.5 worker test setup so the MCP generate_deck path can
     run without real LLM credentials.
     """
-    import edit2docs.tools.convert as convert_module
-    from edit2docs.tools import (
+    import xgen_edit2docs.tools.convert as convert_module
+    from xgen_edit2docs.tools import (
         ConvertResponse,
         CostBreakdown,
         ExecuteBatchResponse,
@@ -69,7 +69,7 @@ def stubbed_pipeline(monkeypatch):
         StrategizeResponse,
     )
 
-    gd = sys.modules["edit2docs.tools.generate_deck"]
+    gd = sys.modules["xgen_edit2docs.tools.generate_deck"]
 
     def _fake_convert(req):
         return ConvertResponse(

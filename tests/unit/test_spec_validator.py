@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from edit2docs.tools._spec_validator import (
+from xgen_edit2docs.tools._spec_validator import (
     SpecLockValidation,
     ValidationWarning,
     validate_spec_lock,
@@ -20,7 +20,7 @@ from edit2docs.tools._spec_validator import (
 
 REAL_ICONS_DIR = (
     Path(__file__).resolve().parents[2]
-    / "src" / "edit2docs" / "core" / "templates" / "icons"
+    / "src" / "xgen_edit2docs" / "core" / "templates" / "icons"
 )
 
 

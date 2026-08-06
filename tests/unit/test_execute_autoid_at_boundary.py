@@ -10,7 +10,7 @@ PPTX.
 
 from __future__ import annotations
 
-from edit2docs.tools.execute import _autoid_top_level_groups
+from xgen_edit2docs.tools.execute import _autoid_top_level_groups
 
 
 def test_anonymous_groups_get_ids():

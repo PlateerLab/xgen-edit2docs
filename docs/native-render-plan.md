@@ -1,6 +1,6 @@
 # Native Render Plan — LibreOffice-free PNG/PDF for all formats
 
-Goal: make edit2docs the complete rendering engine for docx/xlsx/pptx so
+Goal: make xgen_edit2docs the complete rendering engine for docx/xlsx/pptx so
 hosts (Geny et al.) can drop LibreOffice + poppler entirely. One
 architecture: **every format renders to per-page SVG (single IR), then a
 thin raster layer produces PNG/PDF.**
@@ -21,7 +21,7 @@ Verified by spikes (2026-07-05):
 ## Milestones
 
 ### M1 — Render backbone (v0.5.0)  ← this cycle
-- `edit2docs/render/` package:
+- `xgen_edit2docs/render/` package:
   - `rasterize.py` — `svg_to_png()` (resvg-py), `svgs_to_pdf()`
     (PNG pages assembled by PyMuPDF), `svgs_to_pngs()`.
   - `fonts.py` — `FontResolver`: discovers system/env font dirs,

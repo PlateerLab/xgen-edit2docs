@@ -14,9 +14,9 @@ import pytest
 from pptx import Presentation
 from pptx.util import Emu, Inches
 
-import edit2docs
-from edit2docs import analyze_pptx, preview_pptx, run_tool, set_pptx_text
-from edit2docs.agent_tools import ANTHROPIC_TOOLS, TOOL_NAMES
+import xgen_edit2docs
+from xgen_edit2docs import analyze_pptx, preview_pptx, run_tool, set_pptx_text
+from xgen_edit2docs.agent_tools import ANTHROPIC_TOOLS, TOOL_NAMES
 
 
 @pytest.fixture
@@ -36,14 +36,14 @@ def deck_path(tmp_path: Path) -> Path:
 
 class TestLazyPackageSurface:
     def test_version_and_lazy_exports(self):
-        assert edit2docs.__version__
-        assert callable(edit2docs.generate_pptx)
-        assert callable(edit2docs.edit_pptx)
-        assert "ANTHROPIC_TOOLS" in dir(edit2docs)
+        assert xgen_edit2docs.__version__
+        assert callable(xgen_edit2docs.generate_pptx)
+        assert callable(xgen_edit2docs.edit_pptx)
+        assert "ANTHROPIC_TOOLS" in dir(xgen_edit2docs)
 
     def test_unknown_attribute_raises(self):
         with pytest.raises(AttributeError):
-            edit2docs.does_not_exist  # noqa: B018
+            xgen_edit2docs.does_not_exist  # noqa: B018
 
 
 class TestFacadeDeterministicVerbs:
@@ -122,7 +122,7 @@ class TestAgentTools:
             )
 
     def test_openai_surface_matches(self):
-        from edit2docs.agent_tools import OPENAI_TOOLS, tool_specs
+        from xgen_edit2docs.agent_tools import OPENAI_TOOLS, tool_specs
 
         assert [t["function"]["name"] for t in OPENAI_TOOLS] == TOOL_NAMES
         for a, o in zip(ANTHROPIC_TOOLS, OPENAI_TOOLS):
@@ -144,7 +144,7 @@ class TestAgentTools:
         assert res["page_count"] == 1 and Path(res["paths"][0]).exists()
 
     def test_unknown_tool_raises(self):
-        with pytest.raises(ValueError, match="unknown edit2docs tool"):
+        with pytest.raises(ValueError, match="unknown xgen_edit2docs tool"):
             run_tool("rm_rf_slash", {})
 
 
@@ -161,7 +161,7 @@ class TestDocGuide:
         assert res["topics"]
 
     def test_every_topic_resolves(self):
-        from edit2docs.agent_guide import TOPICS
+        from xgen_edit2docs.agent_guide import TOPICS
 
         for topic in TOPICS:
             res = run_tool("doc_guide", {"topic": topic})
@@ -186,7 +186,7 @@ class TestDocGuide:
     def test_host_name_mapping(self):
         """Hosts that rename tools (geny-executor) get the guide rendered
         with THEIR names."""
-        from edit2docs.agent_guide import doc_guide
+        from xgen_edit2docs.agent_guide import doc_guide
 
         names = {"analyze_doc": "DocAnalyze", "set_doc_xml": "DocXmlEdit",
                  "doc_guide": "DocGuide"}
@@ -205,7 +205,7 @@ class TestBuildDoc:
             {"spec": "# Report\n\nBody **text**.\n\n- a\n- b", "output": str(out)},
         )
         assert Path(res["path"]) == out and out.exists()
-        info = edit2docs.analyze_doc(str(out))
+        info = xgen_edit2docs.analyze_doc(str(out))
         assert info["format"] == "docx"
 
     def test_build_xlsx_from_spec(self, tmp_path):
@@ -219,7 +219,7 @@ class TestBuildDoc:
             },
         )
         assert res["page_count"] == 1 and out.exists()
-        assert "3" in str(edit2docs.analyze_doc(str(out)))
+        assert "3" in str(xgen_edit2docs.analyze_doc(str(out)))
 
     def test_build_pptx_from_slide_spec(self, tmp_path):
         out = tmp_path / "r.pptx"
@@ -416,14 +416,14 @@ class TestDocXml:
 
 class TestLocalMcpServer:
     def test_tool_registry_matches_agent_tools(self):
-        from edit2docs.mcp.local_server import build_local_mcp_server
+        from xgen_edit2docs.mcp.local_server import build_local_mcp_server
 
         mcp = build_local_mcp_server()
         tools = asyncio.run(mcp.list_tools())
         assert sorted(t.name for t in tools) == sorted(TOOL_NAMES)
 
     def test_deterministic_tool_call_through_mcp(self, deck_path):
-        from edit2docs.mcp.local_server import build_local_mcp_server
+        from xgen_edit2docs.mcp.local_server import build_local_mcp_server
 
         mcp = build_local_mcp_server()
         result = asyncio.run(

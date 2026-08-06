@@ -11,7 +11,7 @@ import io
 import zipfile
 from pathlib import Path
 
-from edit2docs.tools import ExportRequest, SlideInput, export_pptx
+from xgen_edit2docs.tools import ExportRequest, SlideInput, export_pptx
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "korean_slide.svg"
 

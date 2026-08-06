@@ -8,8 +8,8 @@ import io
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 
-from edit2docs.documents.number_format import format_cell_value
-from edit2docs.documents.xlsx_pages import xlsx_to_page_svgs
+from xgen_edit2docs.documents.number_format import format_cell_value
+from xgen_edit2docs.documents.xlsx_pages import xlsx_to_page_svgs
 
 
 def _wb_bytes(build) -> bytes:

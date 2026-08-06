@@ -12,14 +12,14 @@ import pytest_asyncio
 from httpx import ASGITransport
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from edit2docs.api import dependencies as deps
-from edit2docs.api.main import app
-from edit2docs.db.models import Base
-from edit2docs.documents.docx_engine import docx_from_markdown, docx_outline
-from edit2docs.documents.xlsx_engine import xlsx_from_spec
-from edit2docs.services import jobs as jobs_service
-from edit2docs.services.jobs import FakeJobBus
-from edit2docs.storage import InMemoryStorage
+from xgen_edit2docs.api import dependencies as deps
+from xgen_edit2docs.api.main import app
+from xgen_edit2docs.db.models import Base
+from xgen_edit2docs.documents.docx_engine import docx_from_markdown, docx_outline
+from xgen_edit2docs.documents.xlsx_engine import xlsx_from_spec
+from xgen_edit2docs.services import jobs as jobs_service
+from xgen_edit2docs.services.jobs import FakeJobBus
+from xgen_edit2docs.storage import InMemoryStorage
 
 
 @pytest_asyncio.fixture
@@ -152,7 +152,7 @@ class TestTextEditsDispatch:
         body = resp.json()
         assert body["format"] == "xlsx" and body["applied"] == 1
 
-        from edit2docs.documents.xlsx_engine import xlsx_outline
+        from xgen_edit2docs.documents.xlsx_engine import xlsx_outline
 
         meta = await client.get(f"/v1/assets/{body['doc_asset_id']}")
         raw = await test_storage.get_bytes(meta.json()["storage_key"])
@@ -176,7 +176,7 @@ class TestTextEditsDispatch:
 class TestGenerateJobRoute:
     @pytest.mark.asyncio
     async def test_output_format_validated_and_persisted(self, client, monkeypatch):
-        import edit2docs.api.routes.jobs as jobs_route
+        import xgen_edit2docs.api.routes.jobs as jobs_route
 
         async def _noop(job_id):
             return None
@@ -209,7 +209,7 @@ class TestEditJobDispatch:
         import sys
         from dataclasses import dataclass, field
 
-        from edit2docs.llm.anthropic_client import LLMResult, LLMUsage
+        from xgen_edit2docs.llm.anthropic_client import LLMResult, LLMUsage
 
         target = next(e for e in docx_outline(DOCX) if "첫 문단" in e["text"])
         plan = (
@@ -228,15 +228,15 @@ class TestEditJobDispatch:
                 return LLMResult(text=plan, usage=LLMUsage(input_tokens=1, output_tokens=1),
                                  model="stub", stop_reason="end_turn")
 
-        import edit2docs.tools.edit_doc  # noqa: F401  (ensure module is loaded)
+        import xgen_edit2docs.tools.edit_doc  # noqa: F401  (ensure module is loaded)
 
-        ed = sys.modules["edit2docs.tools.edit_doc"]
+        ed = sys.modules["xgen_edit2docs.tools.edit_doc"]
         monkeypatch.setattr(ed, "AnthropicClient", lambda **kw: _LLM())
 
         # The route's fire-and-forget inline runner opens its own default
         # sessionmaker (not the test override) — noop it and drive the
         # executor manually, same as the existing job tests.
-        import edit2docs.api.routes.jobs as jobs_route
+        import xgen_edit2docs.api.routes.jobs as jobs_route
 
         async def _noop(job_id):
             return None
@@ -255,9 +255,9 @@ class TestEditJobDispatch:
         async with test_db() as session:
             from sqlalchemy import select
 
-            from edit2docs.db.models import Job
-            from edit2docs.workers.executors.edit_deck import run_edit_deck
-            from edit2docs.workers.executors.registry import ExecutionContext
+            from xgen_edit2docs.db.models import Job
+            from xgen_edit2docs.workers.executors.edit_deck import run_edit_deck
+            from xgen_edit2docs.workers.executors.registry import ExecutionContext
 
             job_row = (
                 await session.execute(select(Job).where(Job.id == job_id))
@@ -281,7 +281,7 @@ class TestGenerateJobDocxXlsx:
         import sys
         from dataclasses import dataclass, field
 
-        from edit2docs.llm.anthropic_client import LLMResult, LLMUsage
+        from xgen_edit2docs.llm.anthropic_client import LLMResult, LLMUsage
 
         text = "```document\n# 잡 생성 보고서\n\n- 항목 하나\n```"
 
@@ -294,12 +294,12 @@ class TestGenerateJobDocxXlsx:
                 return LLMResult(text=text, usage=LLMUsage(input_tokens=1, output_tokens=1),
                                  model="stub", stop_reason="end_turn")
 
-        import edit2docs.tools.generate_doc  # noqa: F401
+        import xgen_edit2docs.tools.generate_doc  # noqa: F401
 
-        gd = sys.modules["edit2docs.tools.generate_doc"]
+        gd = sys.modules["xgen_edit2docs.tools.generate_doc"]
         monkeypatch.setattr(gd, "AnthropicClient", lambda **kw: _LLM())
 
-        import edit2docs.api.routes.jobs as jobs_route
+        import xgen_edit2docs.api.routes.jobs as jobs_route
 
         async def _noop(job_id):
             return None
@@ -318,9 +318,9 @@ class TestGenerateJobDocxXlsx:
         async with test_db() as session:
             from sqlalchemy import select
 
-            from edit2docs.db.models import Job
-            from edit2docs.workers.executors.generate_deck import run_generate_deck
-            from edit2docs.workers.executors.registry import ExecutionContext
+            from xgen_edit2docs.db.models import Job
+            from xgen_edit2docs.workers.executors.generate_deck import run_generate_deck
+            from xgen_edit2docs.workers.executors.registry import ExecutionContext
 
             job_row = (
                 await session.execute(select(Job).where(Job.id == job_id))
@@ -344,7 +344,7 @@ class TestGenerateJobDocxXlsx:
         import sys
         from dataclasses import dataclass, field
 
-        from edit2docs.llm.anthropic_client import LLMResult, LLMUsage
+        from xgen_edit2docs.llm.anthropic_client import LLMResult, LLMUsage
 
         text = (
             "```sheet_spec\nsheets:\n  - name: \"진척\"\n"
@@ -358,12 +358,12 @@ class TestGenerateJobDocxXlsx:
                 return LLMResult(text=text, usage=LLMUsage(input_tokens=1, output_tokens=1),
                                  model="stub", stop_reason="end_turn")
 
-        import edit2docs.tools.generate_doc  # noqa: F401
+        import xgen_edit2docs.tools.generate_doc  # noqa: F401
 
-        gd = sys.modules["edit2docs.tools.generate_doc"]
+        gd = sys.modules["xgen_edit2docs.tools.generate_doc"]
         monkeypatch.setattr(gd, "AnthropicClient", lambda **kw: _LLM())
 
-        import edit2docs.api.routes.jobs as jobs_route
+        import xgen_edit2docs.api.routes.jobs as jobs_route
 
         async def _noop(job_id):
             return None
@@ -380,9 +380,9 @@ class TestGenerateJobDocxXlsx:
         async with test_db() as session:
             from sqlalchemy import select
 
-            from edit2docs.db.models import Job
-            from edit2docs.workers.executors.generate_deck import run_generate_deck
-            from edit2docs.workers.executors.registry import ExecutionContext
+            from xgen_edit2docs.db.models import Job
+            from xgen_edit2docs.workers.executors.generate_deck import run_generate_deck
+            from xgen_edit2docs.workers.executors.registry import ExecutionContext
 
             job_row = (
                 await session.execute(select(Job).where(Job.id == job_id))
@@ -395,7 +395,7 @@ class TestGenerateJobDocxXlsx:
         assert job["status"] == "done", job
         assert job["result"]["format"] == "xlsx"
 
-        from edit2docs.documents.xlsx_engine import xlsx_outline
+        from xgen_edit2docs.documents.xlsx_engine import xlsx_outline
 
         meta = (await client.get(f"/v1/assets/{job['result']['doc_asset_id']}")).json()
         raw = await test_storage.get_bytes(meta["storage_key"])

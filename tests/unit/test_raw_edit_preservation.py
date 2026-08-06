@@ -25,12 +25,12 @@ from docx.shared import Inches
 from lxml import etree
 from PIL import Image as PilImage
 
-from edit2docs.documents.docx_engine import (
+from xgen_edit2docs.documents.docx_engine import (
     DocxEdit,
     apply_docx_edits,
     docx_outline,
 )
-from edit2docs.documents.xlsx_engine import (
+from xgen_edit2docs.documents.xlsx_engine import (
     XlsxEdit,
     apply_xlsx_edits,
     xlsx_preview,

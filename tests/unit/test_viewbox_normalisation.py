@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 from xml.etree import ElementTree as ET
 
-from edit2docs.tools.execute import _normalise_viewbox_to_canonical
+from xgen_edit2docs.tools.execute import _normalise_viewbox_to_canonical
 
 
 SVG = "http://www.w3.org/2000/svg"
@@ -132,7 +132,7 @@ def test_content_preserved_inside_wrapper():
     assert 'id="title"' in out
     assert "제목" in out
     # The wrapper carries our marker attribute so we can find it again.
-    assert "data-edit2docs-viewbox-normalise" in out
+    assert "data-xgen_edit2docs-viewbox-normalise" in out
 
 
 def test_defs_stay_outside_the_wrapper():
@@ -188,7 +188,7 @@ def test_quality_accepts_1920x1080_aspect_match(tmp_path):
     """The legacy strict-string check is replaced with an
     aspect-ratio check. 1920×1080 is the FHD form of 16:9 and must
     pass the legacy `_check_viewbox` once we accept aspect-matches."""
-    from edit2docs.core.svg_quality_checker import SVGQualityChecker
+    from xgen_edit2docs.core.svg_quality_checker import SVGQualityChecker
 
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" '
@@ -207,7 +207,7 @@ def test_quality_accepts_1920x1080_aspect_match(tmp_path):
 def test_quality_rejects_4_3_in_16_9_deck(tmp_path):
     """Aspect mismatch is still an error — we tolerate dimension
     variation, not aspect variation."""
-    from edit2docs.core.svg_quality_checker import SVGQualityChecker
+    from xgen_edit2docs.core.svg_quality_checker import SVGQualityChecker
 
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 768" '

@@ -15,12 +15,12 @@ from pptx import Presentation
 from pptx.util import Emu, Inches
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from edit2docs.api import dependencies as deps
-from edit2docs.api.main import app
-from edit2docs.db.models import Base
-from edit2docs.services import jobs as jobs_service
-from edit2docs.services.jobs import FakeJobBus
-from edit2docs.storage import InMemoryStorage
+from xgen_edit2docs.api import dependencies as deps
+from xgen_edit2docs.api.main import app
+from xgen_edit2docs.db.models import Base
+from xgen_edit2docs.services import jobs as jobs_service
+from xgen_edit2docs.services.jobs import FakeJobBus
+from xgen_edit2docs.storage import InMemoryStorage
 
 
 @pytest_asyncio.fixture
@@ -164,7 +164,7 @@ class TestTextEditsRoute:
 class TestEditDeckSources:
     @pytest.mark.asyncio
     async def test_source_asset_ids_persist_on_job(self, client, tmp_path, monkeypatch):
-        import edit2docs.api.routes.jobs as jobs_route
+        import xgen_edit2docs.api.routes.jobs as jobs_route
 
         async def _noop(job_id):
             return None

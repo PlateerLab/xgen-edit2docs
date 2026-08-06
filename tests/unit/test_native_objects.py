@@ -78,7 +78,7 @@ MALFORMED_MARKER_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1
 
 
 def _build_deck(tmp_path: Path, svg_markup: str, **builder_kwargs) -> Path:
-    from edit2docs.core.svg_to_pptx.pptx_builder import create_pptx_with_native_svg
+    from xgen_edit2docs.core.svg_to_pptx.pptx_builder import create_pptx_with_native_svg
 
     svg = tmp_path / "slide_00.svg"
     svg.write_text(svg_markup, encoding="utf-8")
@@ -175,7 +175,7 @@ class TestNativeChartExport:
 
 class TestMarkerValidation:
     def test_checker_flags_malformed_marker_payload(self):
-        from edit2docs.tools.quality import (
+        from xgen_edit2docs.tools.quality import (
             QualityCheckRequest,
             QualitySlide,
             check_svg_quality,
@@ -197,7 +197,7 @@ class TestMarkerValidation:
         assert not resp.passed
 
     def test_checker_accepts_valid_marker(self):
-        from edit2docs.tools.quality import (
+        from xgen_edit2docs.tools.quality import (
             QualityCheckRequest,
             QualitySlide,
             check_svg_quality,
@@ -219,7 +219,7 @@ class TestMarkerValidation:
 
         import pytest
 
-        from edit2docs.core.svg_to_pptx.native_objects import (
+        from xgen_edit2docs.core.svg_to_pptx.native_objects import (
             validate_native_object_marker,
         )
 
@@ -247,7 +247,7 @@ class TestParagraphMerge:
     def test_flatten_annotates_paragraph_block(self):
         from xml.etree import ElementTree as ET
 
-        from edit2docs.core.svg_to_pptx.tspan_flattener import (
+        from xgen_edit2docs.core.svg_to_pptx.tspan_flattener import (
             flatten_positional_tspans,
         )
 
@@ -261,7 +261,7 @@ class TestParagraphMerge:
         assert out.count("<text") == 1
 
     def test_merge_mode_produces_one_txbody_multiple_paragraphs(self, tmp_path: Path):
-        from edit2docs.core.svg_to_pptx.drawingml_converter import (
+        from xgen_edit2docs.core.svg_to_pptx.drawingml_converter import (
             convert_svg_to_slide_shapes,
         )
 
@@ -292,7 +292,7 @@ class TestParagraphMerge:
         ]
 
     def test_no_merge_mode_preserves_line_layout(self, tmp_path: Path):
-        from edit2docs.core.svg_to_pptx.drawingml_converter import (
+        from xgen_edit2docs.core.svg_to_pptx.drawingml_converter import (
             convert_svg_to_slide_shapes,
         )
 
@@ -307,7 +307,7 @@ class TestParagraphMerge:
 
 class TestExportToolThreading:
     def test_export_request_native_objects_threads_end_to_end(self):
-        from edit2docs.tools.export import ExportRequest, SlideInput, export_pptx
+        from xgen_edit2docs.tools.export import ExportRequest, SlideInput, export_pptx
 
         resp = export_pptx(
             ExportRequest(
@@ -324,7 +324,7 @@ class TestExportToolThreading:
             assert any(n.startswith("ppt/embeddings/") for n in names)
 
     def test_export_request_defaults_off(self):
-        from edit2docs.tools.export import ExportRequest, SlideInput, export_pptx
+        from xgen_edit2docs.tools.export import ExportRequest, SlideInput, export_pptx
 
         req = ExportRequest(
             slides=[SlideInput(index=0, name="p01", svg=CHART_MARKER_SVG)],

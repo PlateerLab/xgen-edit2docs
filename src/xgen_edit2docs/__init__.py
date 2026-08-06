@@ -19,7 +19,7 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-__version__ = "0.17.0"
+__version__ = "0.18.0"
 
 _LAZY: dict[str, str] = {
     # Unified, extension-dispatched verbs (docx / xlsx / pptx)

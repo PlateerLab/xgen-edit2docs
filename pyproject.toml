@@ -1,6 +1,6 @@
 [project]
 name = "xgen-edit2docs"
-version = "0.15.0"
+version = "0.16.0"
 description = "AI-agent-native document engine: generate and chat-edit DOCX, XLSX and PPTX as a Python library, agent tool set, MCP server or hosted service. English-first with first-class Korean support. Sister project of edit2ppt."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -38,7 +38,7 @@ dependencies = [
     # edits and PPTX native-content preservation that keep charts,
     # sparklines, custom XML, cached formula values and native
     # charts/tables byte-identical through an edit.
-    "xgen-contextifier>=0.5.0",
+    "xgen-contextifier>=0.6.0",
     # Native chart export (data-pptx-native markers) generates the chart's
     # embedded XLSX workbook with XlsxWriter (upstream 53c6cad5).
     "XlsxWriter>=3.0",
@@ -64,9 +64,19 @@ dependencies = [
     # self-contained wheels: resvg for SVG->PNG, fontTools for metrics.
     "resvg-py>=0.3.3",
     "fonttools>=4.50.0",
+
+    # ── 기능 extras 흡수 (XGEN 은 기능을 옵션으로 두지 않는다) ────────
+    # images(AI 이미지 생성) · svg-fallback 은 라이브러리 기능이다.
+    # 설치 시 [tag] 를 잊으면 조용히 없는 기능이 되므로 기본 포함한다.
+    "google-genai>=1.0.0",
+    "openai>=1.55.0",
+    "cairosvg>=2.7.0",
 ]
 
 [project.optional-dependencies]
+# 남긴 것: server 는 라이브러리 기능이 아니라 **별도 실행 모드**(자체 FastAPI
+# 서비스 + DB + 잡 큐)다. XGEN 은 edit2docs 를 라이브러리로만 쓰므로 기본에
+# 넣으면 실행하지도 않을 웹/DB 스택을 통째로 끌고 온다. dev 는 개발 도구.
 # Hosted multi-tenant service: FastAPI + DB + object storage + job queue.
 server = [
     "fastapi>=0.115.0",
@@ -93,15 +103,6 @@ dev = [
     "ruff>=0.7.0",
     "pyright>=1.1.388",
     "pre-commit>=4.0.0",
-]
-images = [
-    # AI image generation backends — optional. Each gated by env var.
-    "google-genai>=1.0.0",
-    "openai>=1.55.0",
-]
-svg-fallback = [
-    # SVG -> PNG fallback for legacy Office. Pick one.
-    "cairosvg>=2.7.0",
 ]
 
 [project.urls]

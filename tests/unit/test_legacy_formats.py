@@ -314,17 +314,20 @@ def make_hwp_rich() -> bytes:
     def cell_props(col: int, row: int, colspan: int, rowspan: int,
                    w: int, h: int, borderfill: int) -> bytes:
         p = bytearray(40)
+        struct.pack_into("<H", p, 0, 1)  # 표 60: 이 리스트의 문단 수
         struct.pack_into("<4H", p, 8, col, row, colspan, rowspan)
         struct.pack_into("<2i", p, 16, w, h)
         struct.pack_into("<H", p, 32, borderfill)
         return bytes(p)
 
     def cell(level: int, props: bytes, text: str) -> bytes:
+        # 실파일 구조: 셀 문단은 LIST_HEADER 의 **형제**(같은 레벨)다
+        # (pyhwp table.hwp 실측 — L2 LIST_HEADER 다음 L2 PARA_HEADER).
         return b"".join([
             _rec(0x48, level, props),
-            _rec(0x42, level + 1, para_header(0)),
-            _rec(0x43, level + 2, _utf16(text)),
-            _rec(0x44, level + 2, struct.pack("<II", 0, 0)),
+            _rec(0x42, level, para_header(0)),
+            _rec(0x43, level + 1, _utf16(text)),
+            _rec(0x44, level + 1, struct.pack("<II", 0, 0)),
         ])
 
     page = struct.pack("<6I", 59528, 84188, 8504, 8504, 5668, 4252) + b"\x00" * 16
@@ -351,11 +354,11 @@ def make_hwp_rich() -> bytes:
         _rec(0x47, 1, b" osg" + b"\x00" * 8),
         _rec(0x4C, 2, bytes(shape_comp)),
         _rec(0x55, 3, bytes(shape_pic)),
-        # 머리말
+        # 머리말 — 문단은 LIST_HEADER 의 형제 (실파일 구조)
         _rec(0x47, 1, b"daeh" + b"\x00" * 8),
-        _rec(0x48, 2, b"\x00" * 8),
-        _rec(0x42, 3, para_header(0)),
-        _rec(0x43, 4, _utf16("머리말 텍스트")),
+        _rec(0x48, 2, struct.pack("<H", 1) + b"\x00" * 6),
+        _rec(0x42, 2, para_header(0)),
+        _rec(0x43, 3, _utf16("머리말 텍스트")),
         # 본문 두 번째 문단 — 굵게(charshape 2), 글꼴 참조
         _rec(0x42, 0, para_header(0)),
         _rec(0x43, 1, _utf16("본문 끝")),

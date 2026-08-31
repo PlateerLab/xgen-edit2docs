@@ -397,31 +397,66 @@ def _parse_cell_props(payload: bytes) -> _Cell:
     return c
 
 
+def _list_paras(kids: List[_Node], i: int) -> Tuple[List[_Node], int]:
+    """kids[i] (LIST_HEADER) 에 속한 문단 노드들과 다음 인덱스.
+
+    **실파일에서 문단 리스트의 문단들은 LIST_HEADER 의 자식이 아니라 같은
+    레벨의 형제다** (표 60 문단 리스트 헤더 — pyhwp table.hwp 실측:
+    L2 LIST_HEADER 다음 L2 PARA_HEADER). 형제 수는 헤더의 paragraphs
+    필드(UINT16 @0)가 상한이다. 자식으로 중첩된 이형(구버전 산출물)도
+    함께 받아들인다.
+    """
+    lh = kids[i]
+    para_nodes = [c for c in lh.children if c.tagid == TAG_PARA_HEADER]
+    declared = 0
+    if len(lh.payload) >= 2:
+        (declared,) = struct.unpack_from("<H", lh.payload, 0)
+    j = i + 1
+    taken = 0
+    while j < len(kids) and kids[j].tagid == TAG_PARA_HEADER:
+        if declared > 0 and taken >= declared:
+            break
+        para_nodes.append(kids[j])
+        taken += 1
+        j += 1
+    return para_nodes, j
+
+
 def _interpret_table(ctrl: _Node) -> Optional[_Table]:
     """CTRL_HEADER('tbl ') 서브트리 → _Table.
 
     TABLE(표 70) 레코드가 격자 크기를, 그 **뒤의** LIST_HEADER 들이 셀을
     준다 (표 75 — col/row/colspan/rowspan 포함). TABLE **앞의** LIST_HEADER
-    는 캡션이다 (한컴 스펙의 before/after tablebody 구분).
+    는 캡션이다 (한컴 스펙의 before/after tablebody 구분). 셀 내용 문단은
+    LIST_HEADER 의 형제 — _list_paras 참조.
     """
     table = _Table()
     seen_body = False
-    for child in ctrl.children:
+    kids = ctrl.children
+    i = 0
+    while i < len(kids):
+        child = kids[i]
         if child.tagid == TAG_TABLE:
             if len(child.payload) >= 8:
                 rows, cols = struct.unpack_from("<HH", child.payload, 4)
                 if 0 < rows <= 2000 and 0 < cols <= 256:
                     table.rows, table.cols = rows, cols
             seen_body = True
-        elif child.tagid == TAG_LIST_HEADER:
-            paras = _interpret_paras(child.children)
+            i += 1
+            continue
+        if child.tagid == TAG_LIST_HEADER:
+            para_nodes, i = _list_paras(kids, i)
+            paras = [p for p in _interpret_paras(para_nodes)
+                     if isinstance(p, _Para)]
             if seen_body:
                 cell = _parse_cell_props(child.payload)
-                cell.paras = [p for p in paras if isinstance(p, _Para)]
+                cell.paras = paras
                 # 셀 안의 표/그림도 셀 문단의 attachment 로 이미 들어 있다.
                 table.cells.append(cell)
             else:
-                table.caption.extend(p for p in paras if isinstance(p, _Para))
+                table.caption.extend(paras)
+            continue
+        i += 1
     if not table.rows or not table.cols:
         return None
     # 셀 속성이 잘린 이형 파일 — 행 우선 순서로 좌표를 재배정한다.
@@ -442,7 +477,10 @@ def _interpret_gso(ctrl: _Node) -> List[object]:
     out: List[object] = []
 
     def walk(node: _Node, width_hu: int, height_hu: int) -> None:
-        for child in node.children:
+        kids = node.children
+        i = 0
+        while i < len(kids):
+            child = kids[i]
             if child.tagid == TAG_SHAPE_COMPONENT:
                 w, h = width_hu, height_hu
                 if len(child.payload) >= 36:
@@ -456,10 +494,13 @@ def _interpret_gso(ctrl: _Node) -> List[object]:
                     if bindata_id:
                         out.append(_Image(bindata_id, width_hu, height_hu))
             elif child.tagid == TAG_LIST_HEADER:
-                paras = [p for p in _interpret_paras(child.children)
+                para_nodes, i = _list_paras(kids, i)
+                paras = [p for p in _interpret_paras(para_nodes)
                          if isinstance(p, _Para)]
                 if paras:
                     out.append(_TextBox(paras))
+                continue
+            i += 1
 
     walk(ctrl, 0, 0)
     return out
@@ -529,10 +570,15 @@ def _header_footer_paras(roots: List[_Node]) -> Tuple[List[_Para], List[_Para]]:
         target = header if chid == "head" else footer
         if target:
             continue  # 첫 정의만
-        for child in ctrl.children:
-            if child.tagid == TAG_LIST_HEADER:
-                target.extend(p for p in _interpret_paras(child.children)
+        kids = ctrl.children
+        i = 0
+        while i < len(kids):
+            if kids[i].tagid == TAG_LIST_HEADER:
+                para_nodes, i = _list_paras(kids, i)
+                target.extend(p for p in _interpret_paras(para_nodes)
                               if isinstance(p, _Para))
+                continue
+            i += 1
     return header, footer
 
 

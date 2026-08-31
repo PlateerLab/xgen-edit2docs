@@ -501,6 +501,229 @@ def make_ppt(slides: list[tuple[str, str]]) -> bytes:
     return build_cfb({"PowerPoint Document": document})
 
 
+# ── 심화 픽스처: doc (CHPX/PAPX FKP + 표) ─────────────────────
+
+
+def _chp_fkp(runs: list[tuple[int, bytes]], fc_end: int) -> bytes:
+    """CHP FKP 페이지 — [(fc_start, grpprl)] + 마지막 경계."""
+    crun = len(runs)
+    page = bytearray(512)
+    rgfc = [fc for fc, _ in runs] + [fc_end]
+    struct.pack_into(f"<{crun + 1}I", page, 0, *rgfc)
+    cursor = 510
+    for i, (_fc, grpprl) in enumerate(runs):
+        if not grpprl:
+            continue
+        size = 1 + len(grpprl)
+        cursor -= size
+        if cursor % 2:
+            cursor -= 1
+        page[cursor] = len(grpprl)
+        page[cursor + 1:cursor + 1 + len(grpprl)] = grpprl
+        page[(crun + 1) * 4 + i] = cursor // 2
+    page[511] = crun
+    return bytes(page)
+
+
+def _pap_fkp(runs: list[tuple[int, bytes]], fc_end: int) -> bytes:
+    """PAP FKP 페이지 — BX 13B, papx = cb(1B[+1B]) + istd(2B) + sprms."""
+    crun = len(runs)
+    page = bytearray(512)
+    rgfc = [fc for fc, _ in runs] + [fc_end]
+    struct.pack_into(f"<{crun + 1}I", page, 0, *rgfc)
+    cursor = 510
+    for i, (_fc, sprms) in enumerate(runs):
+        if not sprms:
+            continue
+        body = b"\x00\x00" + sprms  # istd 0 + sprms
+        t = len(body)
+        if t % 2:  # size = 2*cb - 1
+            blob = bytes([(t + 1) // 2]) + body
+        else:      # size = 2*cb2 (첫 바이트 0)
+            blob = bytes([0, t // 2]) + body
+        cursor -= len(blob)
+        if cursor % 2:
+            cursor -= 1
+        page[cursor:cursor + len(blob)] = blob
+        page[(crun + 1) * 4 + i * 13] = cursor // 2
+    page[511] = crun
+    return bytes(page)
+
+
+def make_doc_rich() -> bytes:
+    """정렬/런 스타일/글꼴/표(fInTable·fTtp)를 전부 싣는 Word97 픽스처."""
+    body = (
+        "제목 가운데\r"          # cp 0-5, mark @6 — 가운데 정렬
+        "굵은빨강취소\r"          # cp 7-12, mark @13 — 앞 3자 bold+red, 뒤 3자 strike
+        "A1\x07B1\x07\x07"       # 표 1행: 셀 2 + 행마크
+        "A2\x07B2\x07\x07"       # 표 2행
+        "끝문단\r"
+    )
+    text_bytes = _utf16(body)
+    word = bytearray(0x1000)
+    struct.pack_into("<H", word, 0, 0xA5EC)
+    struct.pack_into("<H", word, 0x0A, 0x0000)  # 0Table
+    text_fc = 0x0400
+    word[text_fc:text_fc + len(text_bytes)] = text_bytes
+
+    def fc(cp: int) -> int:
+        return text_fc + 2 * cp
+
+    # CHPX: [0,7) 기본 / [7,10) bold+red / [10,13) strike+underline+14pt+글꼴0
+    sprm_bold = struct.pack("<HB", 0x0835, 1)
+    sprm_red = struct.pack("<H", 0x6870) + bytes([255, 0, 0, 0])
+    sprm_strike = struct.pack("<HB", 0x0837, 1)
+    sprm_kul = struct.pack("<HB", 0x2A3E, 1)
+    sprm_hps = struct.pack("<HH", 0x4A43, 28)  # 14pt
+    sprm_ftc = struct.pack("<HH", 0x4A4F, 0)
+    chp_page = _chp_fkp([
+        (fc(0), b""),
+        (fc(7), sprm_bold + sprm_red),
+        (fc(10), sprm_strike + sprm_kul + sprm_hps + sprm_ftc),
+        (fc(13), b""),
+    ], fc(len(body)))
+
+    # PAPX: 문단 마크 fc 로 구간을 나눈다. 표 구간 문단은 fInTable,
+    # 행마크(\x07 단독)는 fInTable+fTtp. 첫 문단은 jc=center.
+    sprm_jc = struct.pack("<HB", 0x2403, 1)
+    sprm_intbl = struct.pack("<HB", 0x2416, 1)
+    sprm_ttp = struct.pack("<HB", 0x2417, 1)
+    # cp 배치: "제목 가운데\r"=0..6, "굵은빨강취소\r"=7..13,
+    # A1@14-15 \x07@16, B1@17-18 \x07@19, 행마크@20,
+    # A2@21-22 \x07@23, B2@24-25 \x07@26, 행마크@27, "끝문단\r"=28..31
+    pap_page = _pap_fkp([
+        (fc(0), sprm_jc),            # 문단1 (mark @6)
+        (fc(7), b""),                # 문단2
+        (fc(14), sprm_intbl),        # A1 셀
+        (fc(17), sprm_intbl),        # B1 셀
+        (fc(20), sprm_intbl + sprm_ttp),  # 행마크1
+        (fc(21), sprm_intbl),        # A2
+        (fc(24), sprm_intbl),        # B2
+        (fc(27), sprm_intbl + sprm_ttp),  # 행마크2
+        (fc(28), b""),               # 끝문단
+    ], fc(len(body)))
+
+    # FKP 페이지는 512 정렬 오프셋에 놓인다 — pn 6/7 사용 (word 0x1000 안)
+    word[6 * 512:7 * 512] = chp_page
+    word[7 * 512:8 * 512] = pap_page
+
+    table = bytearray(0x0800)
+    # Clx/PlcPcd
+    plc = struct.pack("<2I", 0, len(body)) + struct.pack("<HIH", 0, text_fc, 0)
+    pcdt = b"\x02" + struct.pack("<I", len(plc)) + plc
+    fc_clx = 0x0040
+    table[fc_clx:fc_clx + len(pcdt)] = pcdt
+    struct.pack_into("<II", word, 0x01A2, fc_clx, len(pcdt))
+    # PlcfBteChpx / PlcfBtePapx — 구간 1개, FKP pn 6/7
+    bte_chp = struct.pack("<2I", fc(0), fc(len(body))) + struct.pack("<I", 6)
+    bte_pap = struct.pack("<2I", fc(0), fc(len(body))) + struct.pack("<I", 7)
+    fc_bte_chp, fc_bte_pap = 0x0200, 0x0240
+    table[fc_bte_chp:fc_bte_chp + len(bte_chp)] = bte_chp
+    table[fc_bte_pap:fc_bte_pap + len(bte_pap)] = bte_pap
+    struct.pack_into("<II", word, 0x00FA, fc_bte_chp, len(bte_chp))
+    struct.pack_into("<II", word, 0x0102, fc_bte_pap, len(bte_pap))
+    # SttbfFfn — 글꼴 1개 "바탕"
+    name = "바탕".encode("utf-16le") + b"\x00\x00"
+    ffn_body = bytes(39) + name
+    sttb = struct.pack("<HHH", 0xFFFF, 1, 0) + bytes([len(ffn_body)]) + ffn_body
+    fc_ffn = 0x0300
+    table[fc_ffn:fc_ffn + len(sttb)] = sttb
+    struct.pack_into("<II", word, 0x0112, fc_ffn, len(sttb))
+
+    return build_cfb({"WordDocument": bytes(word), "0Table": bytes(table)})
+
+
+# ── 심화 픽스처: xls (스타일/정렬/채우기/팔레트) ──────────────
+
+
+def make_xls_rich() -> bytes:
+    def rec(rtype: int, payload: bytes) -> bytes:
+        return struct.pack("<HH", rtype, len(payload)) + payload
+
+    s_text = "스타일셀"
+    sst_payload = struct.pack("<II", 1, 1)
+    sst_payload += struct.pack("<HB", len(s_text), 0x01) + s_text.encode("utf-16le")
+
+    def font(height: int, grbit: int, icv: int, weight: int, uls: int) -> bytes:
+        return (struct.pack("<HHHH", height, grbit, icv, weight)
+                + struct.pack("<HBBBB", 0, uls, 0, 0, 0)
+                + b"\x05\x01" + "Arial".encode("utf-16le"))
+
+    # 폰트 0-3 기본, (인덱스 4 없음 규약) → 5번째 폰트가 ifnt=5
+    fonts = [font(200, 0, 0x7FFF, 400, 0)] * 4
+    fonts.append(font(240, 0x0008, 40, 700, 1))  # 12pt bold strike underline icv40
+
+    def xf(ifnt: int, alc: int, pattern_icv: int | None) -> bytes:
+        p = bytearray(20)
+        struct.pack_into("<HH", p, 0, ifnt, 0)
+        p[6] = alc
+        if pattern_icv is not None:
+            struct.pack_into("<i", p, 14, 1 << 26)      # solid
+            struct.pack_into("<H", p, 18, pattern_icv)  # 전경색 icv
+        return bytes(p)
+
+    globals_part = rec(0x0809, struct.pack("<HH", 0x0600, 0x0005) + b"\x00" * 12)
+    for f in fonts:
+        globals_part += rec(0x0031, f)
+    # PALETTE — icv 40 을 (255, 204, 0) 으로 재정의
+    pal = struct.pack("<H", 56)
+    for k in range(56):
+        pal += bytes([255, 204, 0, 0]) if k == 32 else bytes([k, k, k, 0])
+    globals_part += rec(0x0092, pal)
+    for _ in range(15):
+        globals_part += rec(0x00E0, xf(0, 0, None))
+    globals_part += rec(0x00E0, xf(5, 0x02, 40))  # ixfe 15: 가운데+채움+스타일폰트
+    globals_part += rec(0x00FC, sst_payload)
+
+    sheet_cells = rec(0x00FD, struct.pack("<HHHI", 0, 0, 15, 0))
+    sheet = rec(0x0809, struct.pack("<HH", 0x0600, 0x0010) + b"\x00" * 12)
+    sheet += sheet_cells + rec(0x000A, b"")
+
+    name = "S"
+
+    def build_bs(bof: int) -> bytes:
+        return rec(0x0085, struct.pack("<IBB", bof, 0, 0)
+                   + bytes([len(name), 0]) + name.encode("latin-1"))
+
+    eof = rec(0x000A, b"")
+    bof_pos = len(globals_part) + len(build_bs(0)) + len(eof)
+    workbook = globals_part + build_bs(bof_pos) + eof + sheet
+    return build_cfb({"Workbook": workbook})
+
+
+# ── 심화 픽스처: ppt (StyleTextPropAtom 런 스타일) ────────────
+
+
+def make_ppt_rich() -> bytes:
+    def rec(rtype: int, payload: bytes, ver: int = 0) -> bytes:
+        return struct.pack("<HHI", ver, rtype, len(payload)) + payload
+
+    doc_atom = rec(1001, struct.pack("<ii", 5760, 4320) + b"\x00" * 32)
+
+    body_text = "굵은줄\r빨강취소"
+    # 문단 런: 전체 + 1 자 — alignment(0x800)=center(1)
+    para_run = (struct.pack("<I", len(body_text) + 1) + struct.pack("<H", 0)
+                + struct.pack("<I", 0x800) + struct.pack("<H", 1))
+    # 문자 런 1: "굵은줄\r"(4자) — bold + size 24
+    char_run1 = (struct.pack("<I", 4)
+                 + struct.pack("<I", 0x0001 | 0x20000)
+                 + struct.pack("<H", 0x0001) + struct.pack("<H", 24))
+    # 문자 런 2: "빨강취소"(4자)+1 — strike + color 빨강
+    char_run2 = (struct.pack("<I", 5)
+                 + struct.pack("<I", 0x0100 | 0x40000)
+                 + struct.pack("<H", 0x0100) + bytes([255, 0, 0, 0]))
+    style = rec(4001, para_run + char_run1 + char_run2)
+
+    slwt_children = rec(1011, struct.pack("<II", 0, 0) + b"\x00" * 12)
+    slwt_children += rec(3999, struct.pack("<I", 0))
+    slwt_children += rec(4000, "제목".encode("utf-16le"))
+    slwt_children += rec(3999, struct.pack("<I", 1))
+    slwt_children += rec(4000, body_text.encode("utf-16le")) + style
+    slwt = rec(4080, slwt_children, ver=0xF)
+    document = rec(1000, doc_atom + slwt, ver=0xF)
+    return build_cfb({"PowerPoint Document": document})
+
+
 # ─────────────────────────────────────────────────────────────
 # 테스트
 # ─────────────────────────────────────────────────────────────
@@ -639,6 +862,131 @@ class TestDoc:
         svg = _render_svg_pages(tmp_path, "f.doc", make_doc([raw]))
         assert "보이는 결과" in svg
         assert "PAGEREF" not in svg
+
+
+@pytest.fixture(scope="module")
+def rich():
+    from docx import Document
+
+    docx_bytes, fmt = convert_to_ooxml(make_doc_rich(), "doc")
+    assert fmt == "docx"
+    return Document(io.BytesIO(docx_bytes))
+
+
+class TestDocFidelity:
+    """CHPX/PAPX FKP — 런 스타일/정렬/글꼴/표(fInTable·fTtp)."""
+
+    def test_alignment_center(self, rich):
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+        first = rich.paragraphs[0]
+        assert first.text == "제목 가운데"
+        assert first.alignment == WD_ALIGN_PARAGRAPH.CENTER
+
+    def test_char_runs_split_by_chpx(self, rich):
+        para = rich.paragraphs[1]
+        assert para.text == "굵은빨강취소"
+        runs = [r for r in para.runs if r.text]
+        assert runs[0].text == "굵은빨강"[:3]
+        assert runs[0].bold
+        assert str(runs[0].font.color.rgb) == "FF0000"
+        last = runs[-1]
+        assert last.font.strike and last.underline
+        assert last.font.size.pt == 14.0
+        assert last.font.name == "바탕"
+
+    def test_table_from_cell_and_row_marks(self, rich):
+        assert len(rich.tables) == 1
+        tbl = rich.tables[0]
+        assert len(tbl.rows) == 2 and len(tbl.columns) == 2
+        assert tbl.cell(0, 0).text.strip() == "A1"
+        assert tbl.cell(0, 1).text.strip() == "B1"
+        assert tbl.cell(1, 0).text.strip() == "A2"
+        assert tbl.cell(1, 1).text.strip() == "B2"
+        # 표 뒤 본문이 표에 빨려들지 않는다
+        assert any(p.text == "끝문단" for p in rich.paragraphs)
+
+    def test_e2e_svg(self, tmp_path):
+        svg = _render_svg_pages(tmp_path, "rich.doc", make_doc_rich())
+        assert "제목 가운데" in svg
+        assert 'font-weight="bold"' in svg
+        assert "#FF0000" in svg
+        assert "line-through" in svg
+        assert "A1" in svg and "B2" in svg  # 표가 격자로 렌더
+
+
+@pytest.fixture(scope="module")
+def rich_ws():
+    from openpyxl import load_workbook
+
+    xlsx_bytes, fmt = convert_to_ooxml(make_xls_rich(), "xls")
+    assert fmt == "xlsx"
+    return load_workbook(io.BytesIO(xlsx_bytes)).active
+
+
+class TestXlsFidelity:
+    """FONT 색/밑줄/취소선 + XF 정렬/solid 채우기 + PALETTE 재정의."""
+
+
+    def test_font_styles_and_palette_color(self, rich_ws):
+        cell = rich_ws["A1"]
+        assert cell.value == "스타일셀"
+        assert cell.font.bold and cell.font.strike
+        assert cell.font.underline == "single"
+        assert cell.font.size == 12.0
+        # PALETTE 재정의: icv 40 → FFCC00
+        assert (cell.font.color.rgb or "").endswith("FFCC00")
+
+    def test_alignment_and_fill(self, rich_ws):
+        cell = rich_ws["A1"]
+        assert cell.alignment.horizontal == "center"
+        assert cell.fill.patternType == "solid"
+        assert (cell.fill.fgColor.rgb or "").endswith("FFCC00")
+
+    def test_e2e_svg(self, tmp_path):
+        svg = _render_svg_pages(tmp_path, "rich.xls", make_xls_rich())
+        assert "스타일셀" in svg
+        assert "#FFCC00" in svg  # 채우기가 렌더에 도달
+
+
+@pytest.fixture(scope="module")
+def rich_slide():
+    from pptx import Presentation
+
+    pptx_bytes, fmt = convert_to_ooxml(make_ppt_rich(), "ppt")
+    assert fmt == "pptx"
+    return Presentation(io.BytesIO(pptx_bytes)).slides[0]
+
+
+class TestPptFidelity:
+    """StyleTextPropAtom — 문자 런 스타일/문단 정렬."""
+
+
+    def _body_paras(self, slide):
+        boxes = [sh for sh in slide.shapes if sh.has_text_frame]
+        body = boxes[-1]
+        return body.text_frame.paragraphs
+
+    def test_char_run_styles(self, rich_slide):
+        paras = self._body_paras(rich_slide)
+        r1 = paras[0].runs[0]
+        assert r1.text == "굵은줄"
+        assert r1.font.bold
+        assert r1.font.size.pt == 24.0
+        r2 = paras[1].runs[0]
+        assert r2.text == "빨강취소"
+        assert str(r2.font.color.rgb) == "FF0000"
+        assert r2.font._rPr.get("strike") == "sngStrike"
+
+    def test_paragraph_alignment(self, rich_slide):
+        from pptx.enum.text import PP_ALIGN
+
+        paras = self._body_paras(rich_slide)
+        assert paras[0].alignment == PP_ALIGN.CENTER
+
+    def test_e2e_svg(self, tmp_path):
+        svg = _render_svg_pages(tmp_path, "rich.ppt", make_ppt_rich())
+        assert "굵은줄" in svg and "빨강취소" in svg
 
 
 class TestXls:

@@ -274,8 +274,16 @@ def make_hwp_rich() -> bytes:
     bin_data = struct.pack("<HH", 0x1, 1) + bstr("png")       # EMBEDDING, id 1
     face = b"\x00" + bstr("함초롬돋움")
 
-    def border_fill(bg_colorref: int | None) -> bytes:
+    def border_fill(bg_colorref: int | None, *, stroke: int = 1,
+                    width_idx: int = 1, color: int = 0x000000,
+                    left_stroke: int | None = None) -> bytes:
         p = bytearray(44)
+        for k in range(4):  # left, right, top, bottom (표 18 순서)
+            off = 2 + k * 6
+            st = left_stroke if (k == 0 and left_stroke is not None) else stroke
+            p[off] = st
+            p[off + 1] = width_idx
+            struct.pack_into("<I", p, off + 2, color)
         if bg_colorref is not None:
             struct.pack_into("<I", p, 32, 0x1)            # fillflags: colorpattern
             struct.pack_into("<I", p, 36, bg_colorref)    # background COLORREF
@@ -289,20 +297,25 @@ def make_hwp_rich() -> bytes:
         struct.pack_into("<I", p, 52, color_bgr)
         return bytes(p)
 
-    def para_shape(align: int) -> bytes:
-        return struct.pack("<I", align << 2) + b"\x00" * 40
+    def para_shape(align: int, ls: int | None = None) -> bytes:
+        p = bytearray(44)
+        struct.pack_into("<I", p, 0, align << 2)  # bits0-1=0 → RATIO
+        if ls is not None:
+            struct.pack_into("<i", p, 24, ls)
+        return bytes(p)
 
     docinfo = b"".join([
         _rec(0x11, 0, id_mappings),
         _rec(0x12, 0, bin_data),
         _rec(0x13, 0, face),
-        _rec(0x14, 0, border_fill(None)),          # borderfill id 1
-        _rec(0x14, 0, border_fill(0x00CCFF)),      # id 2 — 배경 #FFCC00
+        _rec(0x14, 0, border_fill(None)),          # id 1 — 실선 0.12mm 검정
+        _rec(0x14, 0, border_fill(0x00CCFF, left_stroke=2)),  # id 2 — 배경 + 좌변 대시
+        _rec(0x14, 0, border_fill(None, stroke=0)),           # id 3 — 테두리 없음
         _rec(0x15, 0, char_shape(10.0, 0x0, 0x000000)),        # 0 보통
         _rec(0x15, 0, char_shape(12.0, 0x2 << 2, 0x0000FF)),   # 1 취소선+빨강
         _rec(0x15, 0, char_shape(14.0, 0x2, 0x000000)),        # 2 굵게
-        _rec(0x19, 0, para_shape(1)),  # parashape 0: left
-        _rec(0x19, 0, para_shape(3)),  # parashape 1: center
+        _rec(0x19, 0, para_shape(1)),           # parashape 0: left
+        _rec(0x19, 0, para_shape(3, ls=200)),   # parashape 1: center + 줄간격 200%
     ])
 
     # ── Section0 ──
@@ -315,8 +328,10 @@ def make_hwp_rich() -> bytes:
                    w: int, h: int, borderfill: int) -> bytes:
         p = bytearray(40)
         struct.pack_into("<H", p, 0, 1)  # 표 60: 이 리스트의 문단 수
+        struct.pack_into("<I", p, 4, 1 << 5)  # listflags bits5-6: 세로 가운데
         struct.pack_into("<4H", p, 8, col, row, colspan, rowspan)
         struct.pack_into("<2i", p, 16, w, h)
+        struct.pack_into("<4H", p, 24, 850, 850, 283, 283)  # 안쪽 여백
         struct.pack_into("<H", p, 32, borderfill)
         return bytes(p)
 
@@ -348,7 +363,7 @@ def make_hwp_rich() -> bytes:
         _rec(0x4D, 2, table_rec),
         cell(2, cell_props(0, 0, 2, 1, 16000, 2000, 2), "병합 머리"),
         cell(2, cell_props(2, 0, 1, 2, 8000, 2000, 1), "세로 병합"),
-        cell(2, cell_props(0, 1, 1, 1, 8000, 2000, 1), "좌"),
+        cell(2, cell_props(0, 1, 1, 1, 8000, 2000, 3), "좌"),
         cell(2, cell_props(1, 1, 1, 1, 8000, 2000, 1), "우"),
         # 그림 개체 (gso) — BinData/BIN0001.png
         _rec(0x47, 1, b" osg" + b"\x00" * 8),
@@ -824,6 +839,24 @@ class TestHwpFidelity:
         xml = rich_docx.tables[0]._tbl.xml
         assert "gridCol" in xml
 
+    def test_cell_borders_from_borderfill(self, rich_docx):
+        """표 18 변별 테두리 — 실선/대시/없음이 tcBorders 로 간다."""
+        xml = rich_docx.tables[0]._tbl.xml
+        assert 'w:tcBorders' in xml
+        assert 'w:val="single"' in xml
+        assert 'w:val="dashed"' in xml   # borderfill 2 좌변
+        assert 'w:val="nil"' in xml      # borderfill 3 (테두리 없음, '좌' 셀)
+
+    def test_cell_valign_and_margins(self, rich_docx):
+        xml = rich_docx.tables[0]._tbl.xml
+        assert 'w:vAlign' in xml and 'w:val="center"' in xml  # listflags 세로 가운데
+        assert 'w:tcMar' in xml and 'w:w="170"' in xml        # 850 HWPUNIT → 170 dxa
+
+    def test_line_spacing_from_parashape(self, rich_docx):
+        first = rich_docx.paragraphs[0]
+        assert first.text == "가운데 취소선"
+        assert abs(first.paragraph_format.line_spacing - 2.0) < 0.01
+
     def test_e2e_svg_render(self, tmp_path):
         svg = _render_svg_pages(tmp_path, "rich.hwp", make_hwp_rich())
         assert "병합 머리" in svg and svg.count("병합 머리") == 1
@@ -832,6 +865,8 @@ class TestHwpFidelity:
         assert "line-through" in svg     # 취소선
         assert "<image" in svg           # 그림 개체
         assert "머리말 텍스트" in svg    # 머리말
+        assert "<line" in svg            # 변별 테두리가 선으로 그려진다
+        assert "stroke-dasharray" in svg  # 대시 변
 
 
 class TestHwpx:

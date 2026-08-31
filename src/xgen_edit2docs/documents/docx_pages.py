@@ -13,8 +13,10 @@ size/color/underline/strike, w:jc alignment), heading styles, bullet/
 numbered lists, hard + automatic page breaks, tables (tblGrid widths,
 gridSpan/vMerge merges drawn as one spanning rect, per-run cell styles
 + per-paragraph cell alignment, w:vAlign, trHeight minimums, cell
-shading, row-boundary page splitting, nested tables flattened to
-text), inline images (extent-scaled, base64), single-section page
+shading, **per-side w:tcBorders (single/dashed/dotted/double/nil) with
+width+color, w:tcMar cell padding, w:spacing line-spacing multiples and
+before/after gaps**, row-boundary page splitting, nested tables
+flattened to text), inline images (extent-scaled, base64), single-section page
 size/margins, first-section header/footer text with PAGE field
 support. Floating shapes, multi-column sections and footnote blocks
 are out of scope — the HTML preview covers reading those.
@@ -126,10 +128,14 @@ class _Seg:
 @dataclass
 class _Line:
     segs: list[_Seg] = field(default_factory=list)
+    #: 문단 줄간격 배수 (w:spacing lineRule="auto" line/240) — 1.0 = 기본.
+    spacing_mult: float = 1.0
 
     @property
     def height(self) -> float:
-        return max((s.size_px for s in self.segs), default=_DEFAULT_FONT_PT * 96 / 72) * _LINE_SPACING
+        base = max((s.size_px for s in self.segs),
+                   default=_DEFAULT_FONT_PT * 96 / 72)
+        return base * _LINE_SPACING * self.spacing_mult
 
     @property
     def ascent(self) -> float:
@@ -313,6 +319,32 @@ def _num_pr(paragraph):
     return paragraph._p.find(f"{_w('pPr')}/{_w('numPr')}")
 
 
+def _para_spacing(p_el) -> tuple[float, float, float]:
+    """w:pPr/w:spacing → (앞 px, 뒤 px, 줄간격 배수).
+
+    before/after 는 twips, line 은 lineRule="auto" 일 때 240 = 1배.
+    (HWP 변환물의 160%/200% 줄간격이 여기로 온다.)"""
+    sp = p_el.find(f"{_w('pPr')}/{_w('spacing')}")
+    if sp is None:
+        return 0.0, 0.0, 1.0
+
+    def twips(attr: str) -> float:
+        try:
+            return float(sp.get(_w(attr))) / _TWIPS_PER_PX
+        except (TypeError, ValueError):
+            return 0.0
+
+    mult = 1.0
+    rule = (sp.get(_w("lineRule")) or "auto").lower()
+    try:
+        line = float(sp.get(_w("line")))
+        if rule == "auto" and 60 <= line <= 1200:
+            mult = line / 240.0
+    except (TypeError, ValueError):
+        pass
+    return twips("before"), twips("after"), mult
+
+
 def _para_align(p_el) -> str:
     """w:pPr/w:jc → 'left' | 'center' | 'right'. justify(both)/distribute 는
     좌측 흘림으로 근사한다 (이 엔진은 자간 조정을 하지 않는다)."""
@@ -488,9 +520,61 @@ class _CellBox:
     lines: list = field(default_factory=list)
     fill: Optional[str] = None
     valign: str = "top"  # w:tcPr/w:vAlign — top | center | bottom
+    #: 변별 테두리 {side: (val, width_px, color)} — None = 기본 회색 격자.
+    borders: Optional[dict] = None
+    #: 안쪽 여백 (left, right, top, bottom) px.
+    pad: tuple = (4.0, 4.0, 4.0, 4.0)
 
     def content_h(self) -> float:
         return sum(ln.height for ln, _a in self.lines)
+
+
+#: 테두리 val → SVG dasharray (None = 실선, "skip" = 안 그림)
+_BORDER_DASH = {
+    "nil": "skip", "none": "skip",
+    "dashed": "6 3", "dotted": "2 2", "dotdash": "6 3 2 3",
+    "dotdotdash": "6 3 2 3 2 3",
+}
+
+
+def _cell_borders(tc_el) -> Optional[dict]:
+    """w:tcPr/w:tcBorders → {side: (val, width_px, color)}.
+
+    없으면 None — 표 전체 기본 격자(회색 0.8)로 그린다. sz 는 1/8pt
+    (px = sz/8 × 96/72), 색은 RRGGBB 또는 auto."""
+    tcb = tc_el.find(f"{_w('tcPr')}/{_w('tcBorders')}")
+    if tcb is None:
+        return None
+    out: dict = {}
+    for side in ("left", "right", "top", "bottom"):
+        el = tcb.find(_w(side))
+        if el is None:
+            continue
+        val = (el.get(_w("val")) or "single").lower()
+        try:
+            width_px = max(0.5, float(el.get(_w("sz")) or 4) / 8 * 96 / 72)
+        except ValueError:
+            width_px = 0.8
+        color = el.get(_w("color")) or "444444"
+        if color.lower() == "auto":
+            color = "444444"
+        out[side] = (val, min(width_px, 6.0), f"#{color}")
+    return out or None
+
+
+def _cell_pad(tc_el, default: float) -> tuple:
+    """w:tcPr/w:tcMar → (l, r, t, b) px (dxa=twips)."""
+    mar = tc_el.find(f"{_w('tcPr')}/{_w('tcMar')}")
+    pads = [default] * 4
+    if mar is not None:
+        for i, side in enumerate(("left", "right", "top", "bottom")):
+            el = mar.find(_w(side))
+            if el is not None:
+                try:
+                    pads[i] = min(40.0, max(0.0, float(el.get(_w("w"))) / _TWIPS_PER_PX))
+                except (TypeError, ValueError):
+                    pass
+    return tuple(pads)
 
 
 def _cell_valign(tc_el) -> str:
@@ -516,11 +600,13 @@ def _cell_lines(tc_el, document, avail_w: float) -> list:
         if child.tag == _w("p"):
             paragraph = Paragraph(child, document)
             align = _para_align(child)
+            _bf, _af, mult = _para_spacing(child)
             for segs in _paragraph_segments(paragraph, 0):
                 if not any(s.text for s in segs):
                     continue
                 for ln in _wrap_segments(segs, avail_w):
                     if ln.segs:
+                        ln.spacing_mult = mult
                         out.append((ln, align))
         elif child.tag == _w("tbl"):
             for tr in child.findall(_w("tr")):
@@ -576,10 +662,13 @@ def _table_model(tbl_el, document, widths: list[float], pad: float):
                 col_cursor += span
                 continue
             width = sum(widths[col_cursor:col_cursor + span]) or widths[-1]
+            cpad = _cell_pad(tc, pad)
             box = _CellBox(
                 row=r_i, col=col_cursor, colspan=span,
-                lines=_cell_lines(tc, document, max(width - pad * 2, 10.0)),
+                lines=_cell_lines(tc, document,
+                                  max(width - cpad[0] - cpad[1], 10.0)),
                 fill=_cell_fill(tc), valign=_cell_valign(tc),
+                borders=_cell_borders(tc), pad=cpad,
             )
             boxes.append(box)
             if vmerge == "restart":
@@ -595,12 +684,12 @@ def _table_model(tbl_el, document, widths: list[float], pad: float):
         if box.rowspan == 1:
             r = box.row
             if r < len(row_h):
-                row_h[r] = max(row_h[r], box.content_h() + pad * 2)
+                row_h[r] = max(row_h[r], box.content_h() + box.pad[2] + box.pad[3])
     for box in boxes:
         if box.rowspan > 1:
             end = min(box.row + box.rowspan, len(row_h))
             have = sum(row_h[box.row:end])
-            need = box.content_h() + pad * 2
+            need = box.content_h() + box.pad[2] + box.pad[3]
             if need > have and end - 1 >= box.row:
                 row_h[end - 1] += need - have
     return boxes, row_h
@@ -608,26 +697,73 @@ def _table_model(tbl_el, document, widths: list[float], pad: float):
 
 def _draw_cell_box(writer: _PageWriter, table_idx: int, box: _CellBox,
                    x: float, y: float, w: float, h: float, pad: float) -> None:
-    attrs = f' fill="{box.fill}"' if box.fill else ' fill="none"'
     writer.raw(
         f'<g data-e2d-table="{table_idx}" data-e2d-cell="{box.row},{box.col}">'
-        f'<rect x="{_f(x)}" y="{_f(y)}" width="{_f(w)}" '
-        f'height="{_f(h)}"{attrs} stroke="#B9B9B9" stroke-width="0.8"/>'
     )
+    fill_attr = f' fill="{box.fill}"' if box.fill else ' fill="none"'
+    if box.borders is None:
+        # 변별 테두리 없음 — 기본 격자 (기존과 동일)
+        writer.raw(
+            f'<rect x="{_f(x)}" y="{_f(y)}" width="{_f(w)}" '
+            f'height="{_f(h)}"{fill_attr} stroke="#B9B9B9" stroke-width="0.8"/>'
+        )
+    else:
+        if box.fill:
+            writer.raw(
+                f'<rect x="{_f(x)}" y="{_f(y)}" width="{_f(w)}" '
+                f'height="{_f(h)}" fill="{box.fill}"/>'
+            )
+        coords = {
+            "left": (x, y, x, y + h), "right": (x + w, y, x + w, y + h),
+            "top": (x, y, x + w, y), "bottom": (x, y + h, x + w, y + h),
+        }
+        for side, (x1, y1, x2, y2) in coords.items():
+            spec = box.borders.get(side)
+            if spec is None:
+                # 선언 안 된 변 — 기본 격자선으로 이음새를 메운다
+                writer.raw(
+                    f'<line x1="{_f(x1)}" y1="{_f(y1)}" x2="{_f(x2)}" '
+                    f'y2="{_f(y2)}" stroke="#B9B9B9" stroke-width="0.8"/>'
+                )
+                continue
+            val, width_px, color = spec
+            dash = _BORDER_DASH.get(val)
+            if dash == "skip":
+                continue  # 선 없음 (한글 표의 '테두리 없음' 셀)
+            dash_attr = f' stroke-dasharray="{dash}"' if dash else ""
+            if val in ("double", "triple"):
+                # 이중선 근사 — 가는 선 2개
+                thin = max(0.6, width_px / 3)
+                off = max(1.2, width_px)
+                dx, dy = ((off, 0) if side in ("left", "right") else (0, off))
+                writer.raw(
+                    f'<line x1="{_f(x1)}" y1="{_f(y1)}" x2="{_f(x2)}" y2="{_f(y2)}" '
+                    f'stroke="{color}" stroke-width="{_f(thin)}"/>'
+                    f'<line x1="{_f(x1 + dx)}" y1="{_f(y1 + dy)}" '
+                    f'x2="{_f(x2 + dx)}" y2="{_f(y2 + dy)}" '
+                    f'stroke="{color}" stroke-width="{_f(thin)}"/>'
+                )
+            else:
+                writer.raw(
+                    f'<line x1="{_f(x1)}" y1="{_f(y1)}" x2="{_f(x2)}" '
+                    f'y2="{_f(y2)}" stroke="{color}" '
+                    f'stroke-width="{_f(width_px)}"{dash_attr}/>'
+                )
+    pl, pr, pt, pb = box.pad
     content_h = box.content_h()
     if box.valign == "center":
-        ty = y + max(pad, (h - content_h) / 2)
+        ty = y + max(pt, (h - content_h) / 2)
     elif box.valign == "bottom":
-        ty = y + max(pad, h - content_h - pad)
+        ty = y + max(pt, h - content_h - pb)
     else:
-        ty = y + pad
-    inner_w = max(w - pad * 2, 1.0)
+        ty = y + pt
+    inner_w = max(w - pl - pr, 1.0)
     for ln, align in box.lines:
         if ty + ln.height > y + h + 0.5:  # 넘치는 줄은 셀 경계에서 끊는다
             break
         baseline = ty + ln.ascent
         line_w = sum(s.width() for s in ln.segs)
-        tx = x + pad
+        tx = x + pl
         if align == "center":
             tx += max(0.0, (inner_w - line_w) / 2)
         elif align == "right":
@@ -697,7 +833,8 @@ def _layout_table(writer: _PageWriter, table, table_idx: int) -> None:
             w = sum(widths[box.col:box.col + box.colspan]) or widths[-1]
             h = sum(row_h[top_r:bot_r])
             draw = box if top_r == box.row else _CellBox(
-                row=box.row, col=box.col, fill=box.fill)  # 이월 조각은 빈 칸
+                row=box.row, col=box.col, fill=box.fill,
+                borders=box.borders, pad=box.pad)  # 이월 조각은 빈 칸
             _draw_cell_box(writer, table_idx, draw, x, y_of[top_r], w, h, pad)
         writer.y += acc
         r = chunk_end
@@ -835,6 +972,9 @@ def docx_to_page_svgs(content: bytes) -> list[str]:
                     if heading:
                         writer.y += _PARA_GAP_PX  # breathing room above headings
                     align = _para_align(child)
+                    before_px, after_px, mult = _para_spacing(child)
+                    if before_px > 0:
+                        writer.y += before_px
                     first = True
                     for segs in logical_lines:
                         if bullet and first and segs:
@@ -842,9 +982,10 @@ def docx_to_page_svgs(content: bytes) -> list[str]:
                                          bold=segs[0].bold, color="#222222")] + segs
                         for ln in _wrap_segments(segs, writer.content_w - indent):
                             if ln.segs:
+                                ln.spacing_mult = mult
                                 writer.emit_line(ln, indent=indent, align=align)
                         first = False
-                    writer.y += _PARA_GAP_PX
+                    writer.y += _PARA_GAP_PX + after_px
                 elif not drew_image:
                     # empty paragraph — vertical rhythm (Word keeps them)
                     writer.y += _DEFAULT_FONT_PT * 96 / 72 * 0.9

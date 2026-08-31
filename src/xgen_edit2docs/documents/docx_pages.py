@@ -8,14 +8,16 @@ one self-contained SVG per page. ``render_doc`` feeds these to the
 resvg/PyMuPDF raster layer for PNG/PDF — the piece LibreOffice used to
 provide.
 
-Fidelity scope (deliberate): body paragraphs (runs with
-bold/italic/size/color/underline), heading styles, bullet/numbered
-lists, hard + automatic page breaks, tables (tblGrid widths, gridSpan/
-vMerge merges, cell shading), inline images (extent-scaled, base64),
-single-section page size/margins, first-section header/footer text
-with PAGE field support. Floating shapes, multi-column sections and
-footnote blocks are out of scope — the HTML preview covers reading
-those.
+Fidelity scope (deliberate): body paragraphs (runs with bold/italic/
+size/color/underline/strike, w:jc alignment), heading styles, bullet/
+numbered lists, hard + automatic page breaks, tables (tblGrid widths,
+gridSpan/vMerge merges drawn as one spanning rect, per-run cell styles
++ per-paragraph cell alignment, w:vAlign, trHeight minimums, cell
+shading, row-boundary page splitting, nested tables flattened to
+text), inline images (extent-scaled, base64), single-section page
+size/margins, first-section header/footer text with PAGE field
+support. Floating shapes, multi-column sections and footnote blocks
+are out of scope — the HTML preview covers reading those.
 
 Addressing: each body paragraph's lines are wrapped in
 ``<g data-e2d-para="i">`` and table cells carry ``data-e2d-table`` /
@@ -105,11 +107,20 @@ class _Seg:
     bold: bool = False
     italic: bool = False
     underline: bool = False
+    strike: bool = False
     color: str = "#222222"
     family: Optional[str] = None
 
     def width(self) -> float:
         return _text_width(self.text, self.size_px, self.bold, self.family)
+
+    def deco(self) -> str:
+        parts = []
+        if self.underline:
+            parts.append("underline")
+        if self.strike:
+            parts.append("line-through")
+        return " ".join(parts)
 
 
 @dataclass
@@ -206,9 +217,14 @@ class _PageWriter:
 
     # ── primitives ──────────────────────────────────────────
 
-    def emit_line(self, line: _Line, indent: float = 0.0) -> None:
+    def emit_line(self, line: _Line, indent: float = 0.0, align: str = "left") -> None:
+        """*align*: 'left' | 'center' | 'right' — 남는 폭만큼 시작점을 민다."""
         self.ensure(line.height)
         x = self.m["left"] + indent
+        if align in ("center", "right"):
+            line_w = sum(s.width() for s in line.segs)
+            slack = max(0.0, self.content_w - indent - line_w)
+            x += slack / 2 if align == "center" else slack
         baseline = self.y + line.ascent
         for seg in line.segs:
             if seg.text:
@@ -217,8 +233,9 @@ class _PageWriter:
                     style.append('font-style="italic"')
                 if seg.bold:
                     style.append('font-weight="bold"')
-                if seg.underline:
-                    style.append('text-decoration="underline"')
+                deco = seg.deco()
+                if deco:
+                    style.append(f'text-decoration="{deco}"')
                 fam = f"'{seg.family}', {_FONT_STACK}" if seg.family else _FONT_STACK
                 self.pages[-1].append(
                     f'<text x="{_f(x)}" y="{_f(baseline)}" font-size="{_f(seg.size_px)}" '
@@ -296,6 +313,18 @@ def _num_pr(paragraph):
     return paragraph._p.find(f"{_w('pPr')}/{_w('numPr')}")
 
 
+def _para_align(p_el) -> str:
+    """w:pPr/w:jc → 'left' | 'center' | 'right'. justify(both)/distribute 는
+    좌측 흘림으로 근사한다 (이 엔진은 자간 조정을 하지 않는다)."""
+    jc = p_el.find(f"{_w('pPr')}/{_w('jc')}")
+    val = (jc.get(_w("val")) or "").lower() if jc is not None else ""
+    if val in ("center",):
+        return "center"
+    if val in ("right", "end"):
+        return "right"
+    return "left"
+
+
 def _effective_size_pt(run, paragraph, heading: int) -> float:
     try:
         if run.font.size is not None:
@@ -337,11 +366,16 @@ def _paragraph_segments(paragraph, heading: int) -> list[list[_Seg]]:
     for run in paragraph.runs:
         size_px = _effective_size_pt(run, paragraph, heading) * 96.0 / 72.0
         bold = bool(run.bold) or heading in (1, 2, 3)
+        try:
+            strike = bool(run.font.strike)
+        except Exception:  # noqa: BLE001
+            strike = False
         seg_style = dict(
             size_px=size_px,
             bold=bold,
             italic=bool(run.italic),
             underline=bool(run.underline),
+            strike=strike,
             color=_run_color(run),
             family=(run.font.name or None),
         )
@@ -442,77 +476,231 @@ def _cell_fill(tc_el) -> Optional[str]:
     return None
 
 
-def _layout_table(writer: _PageWriter, table, table_idx: int) -> None:
-    tbl_el = table._tbl
-    widths = _grid_widths(tbl_el, writer.content_w)
-    pad = 4.0
-    font_px = 10.0 * 96 / 72
+@dataclass
+class _CellBox:
+    """앵커 셀 하나 — 병합(gridSpan/vMerge)을 흡수한 격자상의 사각형."""
 
+    row: int
+    col: int
+    rowspan: int = 1
+    colspan: int = 1
+    #: (줄, 그 줄의 문단 정렬) — 셀 문단별 jc 를 줄 단위로 내린 것.
+    lines: list = field(default_factory=list)
+    fill: Optional[str] = None
+    valign: str = "top"  # w:tcPr/w:vAlign — top | center | bottom
+
+    def content_h(self) -> float:
+        return sum(ln.height for ln, _a in self.lines)
+
+
+def _cell_valign(tc_el) -> str:
+    va = tc_el.find(f"{_w('tcPr')}/{_w('vAlign')}")
+    val = (va.get(_w("val")) or "").lower() if va is not None else ""
+    if val in ("center",):
+        return "center"
+    if val in ("bottom",):
+        return "bottom"
+    return "top"
+
+
+def _cell_lines(tc_el, document, avail_w: float) -> list:
+    """셀 내용 → [(줄, 정렬)] — 문단별 런 스타일과 jc 를 보존해 감싼다.
+
+    중첩 표는 이 엔진의 격자 밖이라 행 단위 텍스트(' | ' 연결)로 평탄화
+    한다 — 배치는 잃지만 내용은 잃지 않는다.
+    """
+    from docx.text.paragraph import Paragraph
+
+    out: list = []
+    for child in tc_el:
+        if child.tag == _w("p"):
+            paragraph = Paragraph(child, document)
+            align = _para_align(child)
+            for segs in _paragraph_segments(paragraph, 0):
+                if not any(s.text for s in segs):
+                    continue
+                for ln in _wrap_segments(segs, avail_w):
+                    if ln.segs:
+                        out.append((ln, align))
+        elif child.tag == _w("tbl"):
+            for tr in child.findall(_w("tr")):
+                texts = []
+                for tc2 in tr.findall(_w("tc")):
+                    t = "".join(t.text or "" for t in tc2.iter(_w("t"))).strip()
+                    if t:
+                        texts.append(t)
+                if texts:
+                    seg = _Seg(text=" | ".join(texts), size_px=10.0 * 96 / 72)
+                    for ln in _wrap_segments([seg], avail_w):
+                        if ln.segs:
+                            out.append((ln, "left"))
+    return out
+
+
+def _table_model(tbl_el, document, widths: list[float], pad: float):
+    """w:tbl → (앵커 셀 목록, 행 높이 목록). vMerge continue 는 앵커의
+    rowspan 으로 흡수되고, 행 높이는 내용/trHeight/병합 부족분 순으로 채운다."""
+    font_px = 10.0 * 96 / 72
     rows = tbl_el.findall(_w("tr"))
-    grid_cols = len(widths)
-    # vMerge tracking: (col) -> remaining anchor rect to extend
+    boxes: list[_CellBox] = []
+    anchor_at: dict[int, _CellBox] = {}  # col → 위 행에서 내려오는 vMerge 앵커
+    min_row_h: list[float] = []
+
     for r_i, tr in enumerate(rows):
-        cells = tr.findall(_w("tc"))
-        # measure row height
+        trh = tr.find(f"{_w('trPr')}/{_w('trHeight')}")
+        try:
+            min_h = float(trh.get(_w("val"))) / _TWIPS_PER_PX if trh is not None else 0.0
+        except (TypeError, ValueError):
+            min_h = 0.0
+        min_row_h.append(max(min_h, font_px * _LINE_SPACING + pad * 2))
+
         col_cursor = 0
-        cell_layouts = []
-        row_h = font_px * _LINE_SPACING + pad * 2
-        for tc in cells:
+        for tc in tr.findall(_w("tc")):
             tc_pr = tc.find(_w("tcPr"))
             span = 1
-            v_merge_cont = False
+            vmerge = None  # None | 'restart' | 'continue'
             if tc_pr is not None:
                 gs = tc_pr.find(_w("gridSpan"))
                 if gs is not None:
-                    span = int(gs.get(_w("val")) or 1)
+                    try:
+                        span = max(1, int(gs.get(_w("val")) or 1))
+                    except ValueError:
+                        span = 1
                 vm = tc_pr.find(_w("vMerge"))
-                if vm is not None and (vm.get(_w("val")) or "continue") != "restart":
-                    v_merge_cont = True
-            width = sum(widths[col_cursor:col_cursor + span]) or widths[-1]
-            text = " ".join(
-                "".join(t.text or "" for t in p.iter(_w("t")))
-                for p in tc.findall(_w("p"))
-            ).strip()
-            seg = _Seg(text=text, size_px=font_px)
-            wrapped = _wrap_segments([seg], max(width - pad * 2, 10.0)) if text else []
-            cell_h = max(
-                sum(ln.height for ln in wrapped) + pad * 2,
-                font_px * _LINE_SPACING + pad * 2,
-            )
-            if not v_merge_cont:
-                row_h = max(row_h, cell_h)
-            cell_layouts.append(
-                (col_cursor, span, width, wrapped, v_merge_cont, _cell_fill(tc))
-            )
-            col_cursor += span
-        writer.ensure(row_h)
-        x0 = writer.m["left"]
-        y0 = writer.y
-        for col_i, span, width, wrapped, v_cont, fill in cell_layouts:
-            cx = x0 + sum(widths[:col_i])
-            if v_cont:
+                if vm is not None:
+                    vmerge = (vm.get(_w("val")) or "continue").lower()
+            if vmerge == "continue":
+                anchor = anchor_at.get(col_cursor)
+                if anchor is not None:
+                    anchor.rowspan = r_i - anchor.row + 1
+                col_cursor += span
                 continue
-            attrs = f' fill="{fill}"' if fill else ' fill="none"'
-            writer.raw(
-                f'<g data-e2d-table="{table_idx}" data-e2d-cell="{r_i},{col_i}">'
-                f'<rect x="{_f(cx)}" y="{_f(y0)}" width="{_f(width)}" '
-                f'height="{_f(row_h)}"{attrs} stroke="#B9B9B9" stroke-width="0.8"/>'
+            width = sum(widths[col_cursor:col_cursor + span]) or widths[-1]
+            box = _CellBox(
+                row=r_i, col=col_cursor, colspan=span,
+                lines=_cell_lines(tc, document, max(width - pad * 2, 10.0)),
+                fill=_cell_fill(tc), valign=_cell_valign(tc),
             )
-            ty = y0 + pad
-            for ln in wrapped:
-                baseline = ty + ln.ascent
-                tx = cx + pad
-                for seg2 in ln.segs:
-                    writer.raw(
-                        f'<text x="{_f(tx)}" y="{_f(baseline)}" '
-                        f'font-size="{_f(seg2.size_px)}" fill="#222222" '
-                        f'font-family="{_FONT_STACK}" xml:space="preserve">'
-                        f"{_esc(seg2.text)}</text>"
-                    )
-                    tx += seg2.width()
-                ty += ln.height
-            writer.raw("</g>")
-        writer.y += row_h
+            boxes.append(box)
+            if vmerge == "restart":
+                anchor_at[col_cursor] = box
+            else:
+                anchor_at.pop(col_cursor, None)
+            col_cursor += span
+
+    # 행 높이: ① 단일행 셀 내용 → ② trHeight 최소 → ③ 병합 셀 부족분은
+    # 마지막 스팬 행에 몰아준다 (한/워드의 자동 늘림과 같은 근사).
+    row_h = list(min_row_h)
+    for box in boxes:
+        if box.rowspan == 1:
+            r = box.row
+            if r < len(row_h):
+                row_h[r] = max(row_h[r], box.content_h() + pad * 2)
+    for box in boxes:
+        if box.rowspan > 1:
+            end = min(box.row + box.rowspan, len(row_h))
+            have = sum(row_h[box.row:end])
+            need = box.content_h() + pad * 2
+            if need > have and end - 1 >= box.row:
+                row_h[end - 1] += need - have
+    return boxes, row_h
+
+
+def _draw_cell_box(writer: _PageWriter, table_idx: int, box: _CellBox,
+                   x: float, y: float, w: float, h: float, pad: float) -> None:
+    attrs = f' fill="{box.fill}"' if box.fill else ' fill="none"'
+    writer.raw(
+        f'<g data-e2d-table="{table_idx}" data-e2d-cell="{box.row},{box.col}">'
+        f'<rect x="{_f(x)}" y="{_f(y)}" width="{_f(w)}" '
+        f'height="{_f(h)}"{attrs} stroke="#B9B9B9" stroke-width="0.8"/>'
+    )
+    content_h = box.content_h()
+    if box.valign == "center":
+        ty = y + max(pad, (h - content_h) / 2)
+    elif box.valign == "bottom":
+        ty = y + max(pad, h - content_h - pad)
+    else:
+        ty = y + pad
+    inner_w = max(w - pad * 2, 1.0)
+    for ln, align in box.lines:
+        if ty + ln.height > y + h + 0.5:  # 넘치는 줄은 셀 경계에서 끊는다
+            break
+        baseline = ty + ln.ascent
+        line_w = sum(s.width() for s in ln.segs)
+        tx = x + pad
+        if align == "center":
+            tx += max(0.0, (inner_w - line_w) / 2)
+        elif align == "right":
+            tx += max(0.0, inner_w - line_w)
+        for seg2 in ln.segs:
+            if seg2.text:
+                style = []
+                if seg2.italic:
+                    style.append('font-style="italic"')
+                if seg2.bold:
+                    style.append('font-weight="bold"')
+                deco = seg2.deco()
+                if deco:
+                    style.append(f'text-decoration="{deco}"')
+                fam = f"'{seg2.family}', {_FONT_STACK}" if seg2.family else _FONT_STACK
+                writer.raw(
+                    f'<text x="{_f(tx)}" y="{_f(baseline)}" '
+                    f'font-size="{_f(seg2.size_px)}" fill="{seg2.color}" '
+                    f'font-family="{fam}" {" ".join(style)} xml:space="preserve">'
+                    f"{_esc(seg2.text)}</text>"
+                )
+            tx += seg2.width()
+        ty += ln.height
+    writer.raw("</g>")
+
+
+def _layout_table(writer: _PageWriter, table, table_idx: int) -> None:
+    """표 전체를 격자 모델로 그린다 — 병합(gridSpan/vMerge)은 앵커 셀
+    사각형 하나가 스팬 전체를 덮는다. 페이지에 다 안 들어가면 행 경계에서
+    쪼개고, 경계를 걸치는 병합 셀은 그 페이지 조각까지만 그린다."""
+    tbl_el = table._tbl
+    widths = _grid_widths(tbl_el, writer.content_w)
+    pad = 4.0
+    document = getattr(table, "_parent", None)
+
+    boxes, row_h = _table_model(tbl_el, document, widths, pad)
+    if not row_h:
+        return
+    n_rows = len(row_h)
+    col_x = [0.0]
+    for w in widths:
+        col_x.append(col_x[-1] + w)
+
+    r = 0
+    while r < n_rows:
+        avail = writer.bottom - writer.y
+        total_rest = sum(row_h[r:])
+        if total_rest > avail and writer.y > writer.m["top"] + 1:
+            writer.page_break()
+            avail = writer.bottom - writer.y
+        # 이 페이지에 들어가는 행 조각 [r, chunk_end)
+        chunk_end, acc = r, 0.0
+        while chunk_end < n_rows and (acc + row_h[chunk_end] <= avail or chunk_end == r):
+            acc += row_h[chunk_end]
+            chunk_end += 1
+        y_of = {r: writer.y}
+        for ri in range(r, chunk_end):
+            y_of[ri + 1] = y_of[ri] + row_h[ri]
+        for box in boxes:
+            b_end = box.row + box.rowspan
+            if b_end <= r or box.row >= chunk_end:
+                continue
+            # 페이지 조각으로 클립 — 경계를 걸치면 이 조각 몫만 그린다.
+            top_r = max(box.row, r)
+            bot_r = min(b_end, chunk_end)
+            x = writer.m["left"] + col_x[min(box.col, len(widths))]
+            w = sum(widths[box.col:box.col + box.colspan]) or widths[-1]
+            h = sum(row_h[top_r:bot_r])
+            draw = box if top_r == box.row else _CellBox(
+                row=box.row, col=box.col, fill=box.fill)  # 이월 조각은 빈 칸
+            _draw_cell_box(writer, table_idx, draw, x, y_of[top_r], w, h, pad)
+        writer.y += acc
+        r = chunk_end
     writer.y += _PARA_GAP_PX
 
 
@@ -646,6 +834,7 @@ def docx_to_page_svgs(content: bytes) -> list[str]:
                 if text_present:
                     if heading:
                         writer.y += _PARA_GAP_PX  # breathing room above headings
+                    align = _para_align(child)
                     first = True
                     for segs in logical_lines:
                         if bullet and first and segs:
@@ -653,7 +842,7 @@ def docx_to_page_svgs(content: bytes) -> list[str]:
                                          bold=segs[0].bold, color="#222222")] + segs
                         for ln in _wrap_segments(segs, writer.content_w - indent):
                             if ln.segs:
-                                writer.emit_line(ln, indent=indent)
+                                writer.emit_line(ln, indent=indent, align=align)
                         first = False
                     writer.y += _PARA_GAP_PX
                 elif not drew_image:

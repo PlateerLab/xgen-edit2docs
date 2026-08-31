@@ -462,9 +462,28 @@ _DOC_FORMATS = ("pptx", "docx", "xlsx")
 _LEGACY_FORMATS = ("hwp", "hwpx", "doc", "xls", "ppt")
 
 
-def _fmt_of(path: str | Path) -> str:
+def _fmt_of(path: str | Path, *, legacy: str = "reject") -> str:
+    """확장자 → 포맷. *legacy* 정책이 레거시(hwp/hwpx/doc/xls/ppt) 취급을
+    가른다:
+
+    - ``"allow"``  렌더/미리보기/분석 같은 **읽기 계열** — 호출자가
+      :func:`_normalize_legacy` 로 OOXML 사본을 만들어 진행한다.
+    - ``"reject"`` (기본) **편집/생성 계열** — 레거시를 받으면 변환 사본을
+      고치게 되어 원본에는 반영되지 않으므로 명시적으로 거부한다.
+      (기본을 reject 로 둔 이유: 새 진입점이 정책 지정을 잊으면 조용히
+      엉뚱한 분기로 흐르는 대신 즉시 명확한 에러가 난다 — v0.19.0 에서
+      analyze_doc 이 hwp 를 xlsx 분기로 흘린 실사고의 재발 방지.)
+    """
     suffix = Path(path).suffix.lower().lstrip(".")
-    if suffix not in _DOC_FORMATS and suffix not in _LEGACY_FORMATS:
+    if suffix in _LEGACY_FORMATS:
+        if legacy == "allow":
+            return suffix
+        raise ValueError(
+            f"Legacy format .{suffix} is read-only here: render/preview/"
+            f"analyze 는 지원하지만 편집·생성은 .docx/.xlsx/.pptx 만 가능합니다 "
+            f"({Path(path).name})"
+        )
+    if suffix not in _DOC_FORMATS:
         raise ValueError(
             f"Unsupported document format: {Path(path).name} "
             f"(supported: {', '.join('.' + f for f in _DOC_FORMATS + _LEGACY_FORMATS)})"
@@ -509,7 +528,7 @@ def render_doc(
     Returns:
         :class:`RenderResult` with the written file paths.
     """
-    _fmt_of(doc)  # 확장자 검증 (레거시 포함)
+    _fmt_of(doc, legacy="allow")  # 확장자 검증 (레거시 포함)
     doc = _normalize_legacy(doc)
     fmt = _fmt_of(doc)
     to = (to or "png").strip().lower()
@@ -691,7 +710,7 @@ def preview_doc(
     ``preview.md`` file with ``out_dir``). 레거시 포맷(hwp/hwpx/doc/xls/ppt)
     은 OOXML 로 정규화된 뒤 같은 경로를 탄다.
     """
-    _fmt_of(doc)
+    _fmt_of(doc, legacy="allow")
     doc = _normalize_legacy(doc)
     fmt = _fmt_of(doc)
     if fmt == "pptx":
@@ -724,6 +743,8 @@ def analyze_doc(doc: str | Path) -> dict:
     """
     from .documents.chart_edit import list_charts
 
+    _fmt_of(doc, legacy="allow")
+    doc = _normalize_legacy(doc)
     fmt = _fmt_of(doc)
     content = _read_pptx(doc)
     if fmt == "pptx":
@@ -749,6 +770,8 @@ def list_charts(doc: str | Path) -> list[dict]:
     :func:`edit_chart` takes."""
     from .documents.chart_edit import list_charts as _list
 
+    _fmt_of(doc, legacy="allow")
+    doc = _normalize_legacy(doc)
     return _list(_read_pptx(doc), _fmt_of(doc))
 
 
@@ -849,7 +872,8 @@ def list_doc_parts(doc: str | Path) -> list[dict]:
     """
     from .documents.xml_edit import list_parts
 
-    _fmt_of(doc)  # gate to the supported formats
+    _fmt_of(doc, legacy="allow")  # gate to the supported formats
+    doc = _normalize_legacy(doc)
     return list_parts(_read_pptx(doc))
 
 
@@ -862,7 +886,8 @@ def get_doc_xml(doc: str | Path, part: str) -> str:
     """
     from .documents.xml_edit import get_xml
 
-    _fmt_of(doc)
+    _fmt_of(doc, legacy="allow")
+    doc = _normalize_legacy(doc)
     return get_xml(_read_pptx(doc), part)
 
 

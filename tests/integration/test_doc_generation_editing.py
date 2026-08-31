@@ -217,10 +217,23 @@ class TestUnifiedFacade:
     def test_unsupported_extension_raises(self, tmp_path: Path):
         from xgen_edit2docs import analyze_doc
 
-        bad = tmp_path / "file.hwp"
+        bad = tmp_path / "file.xyz"
         bad.write_bytes(b"x")
         with pytest.raises(ValueError, match="Unsupported document format"):
             analyze_doc(bad)
+
+    def test_legacy_extension_contract(self, tmp_path: Path):
+        """레거시(.hwp)는 읽기 계열에서 정규화 대상 — 깨진 파일이면
+        LegacyConvertError, 편집 계열이면 정규화 전에 read-only 거부."""
+        from xgen_edit2docs import analyze_doc, set_doc_text
+        from xgen_edit2docs.documents.legacy import LegacyConvertError
+
+        junk = tmp_path / "file.hwp"
+        junk.write_bytes(b"x")
+        with pytest.raises(LegacyConvertError):
+            analyze_doc(junk)  # v0.19.0 회귀: xlsx 분기로 흘러 엉뚱한 에러가 났다
+        with pytest.raises(ValueError, match="read-only"):
+            set_doc_text(junk, [])
 
     def test_agent_tools_dispatch(self, tmp_path: Path):
         from xgen_edit2docs.agent_tools import TOOL_NAMES, run_tool

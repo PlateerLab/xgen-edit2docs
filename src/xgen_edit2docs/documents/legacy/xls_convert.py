@@ -7,8 +7,11 @@ LABELSST/FORMULA 캐시값/BOOLERR)·행 높이(ROW)·열 너비(COLINFO)·병�
 (MERGEDCELLS)을 읽어 openpyxl 워크북으로 재조립한다.
 
 충실도 범위: 값·수식 캐시값·문자열(서식 run 은 평문화)·열너비/행높이·
-병합·숫자서식·굵게/기울임/크기. 차트·이미지·조건부서식은 범위 밖.
-BIFF5(.xls 구버전)는 SST 가 없어 지원하지 않는다 — 정직하게 거절한다.
+병합·숫자서식·글꼴(굵게/기울임/밑줄/취소선/크기/색 — FONT 표준+PALETTE
+재정의)·셀 정렬(XF alc/alcV/fWrap)·단색 채우기(XF 패턴 solid).
+차트·이미지·조건부서식은 범위 밖. BIFF5(.xls 구버전)는 SST 가 없어
+지원하지 않는다 — 정직하게 거절한다. (XF/FONT/PALETTE 레이아웃은
+reference_data/xlrd formatting.py 와 대조.)
 """
 
 from __future__ import annotations
@@ -40,6 +43,7 @@ _R_MERGEDCELLS = 0x00E5
 _R_FONT = 0x0031
 _R_XF = 0x00E0
 _R_FORMAT = 0x041E
+_R_PALETTE = 0x0092
 
 
 def _iter_biff(data: bytes, start: int = 0):
@@ -149,17 +153,59 @@ class _SstReader:
         return s
 
 
+#: BIFF8 기본 팔레트 표 (xlrd excel_default_palette_b8) — icv 0-7 은 앞 8개
+#: 고정 EGA, icv 8-63 은 표 전체(56개) 순서 (xlrd initialise_colour_map:
+#: colour_map[i+8] = dpal[i]). PALETTE 레코드가 icv 8+ 를 덮어쓴다.
+_DEFAULT_PALETTE = (
+    (0, 0, 0), (255, 255, 255), (255, 0, 0), (0, 255, 0),
+    (0, 0, 255), (255, 255, 0), (255, 0, 255), (0, 255, 255),
+    (128, 0, 0), (0, 128, 0), (0, 0, 128), (128, 128, 0),
+    (128, 0, 128), (0, 128, 128), (192, 192, 192), (128, 128, 128),
+    (153, 153, 255), (153, 51, 102), (255, 255, 204), (204, 255, 255),
+    (102, 0, 102), (255, 128, 128), (0, 102, 204), (204, 204, 255),
+    (0, 0, 128), (255, 0, 255), (255, 255, 0), (0, 255, 255),
+    (128, 0, 128), (128, 0, 0), (0, 128, 128), (0, 0, 255),
+    (0, 204, 255), (204, 255, 255), (204, 255, 204), (255, 255, 153),
+    (153, 204, 255), (255, 153, 204), (204, 153, 255), (255, 204, 153),
+    (51, 102, 255), (51, 204, 204), (153, 204, 0), (255, 204, 0),
+    (255, 153, 0), (255, 102, 0), (102, 102, 153), (150, 150, 150),
+    (0, 51, 102), (51, 153, 102), (0, 51, 0), (51, 51, 0),
+    (153, 51, 0), (153, 51, 102), (51, 51, 153), (51, 51, 51),
+)
+
+
 @dataclass
 class _Font:
     size_pt: float = 10.0
     bold: bool = False
     italic: bool = False
+    underline: bool = False
+    strike: bool = False
+    color_icv: Optional[int] = None
+
+
+#: XF alc(수평 정렬) → openpyxl horizontal
+_HALIGN = {1: "left", 2: "center", 3: "right", 5: "justify", 6: "centerContinuous"}
+#: XF alcV(수직 정렬) → openpyxl vertical
+_VALIGN = {0: "top", 1: "center", 2: "bottom", 3: "justify"}
+
+
+@dataclass
+class _XfStyle:
+    ifnt: int = 0
+    ifmt: int = 0
+    halign: Optional[str] = None
+    valign: Optional[str] = None
+    wrap: bool = False
+    fill_icv: Optional[int] = None  # solid 패턴의 전경색 icv
 
 
 def xls_to_xlsx(content: bytes) -> bytes:
     import olefile
     from openpyxl import Workbook
+    from openpyxl.styles import Alignment as XlAlignment
     from openpyxl.styles import Font as XlFont
+    from openpyxl.styles import PatternFill as XlPatternFill
     from openpyxl.styles.numbers import BUILTIN_FORMATS
     from openpyxl.utils import get_column_letter
 
@@ -177,10 +223,12 @@ def xls_to_xlsx(content: bytes) -> bytes:
     # ── 워크북 전역부 ───────────────────────────────────────────
     sst: List[str] = []
     fonts: List[_Font] = []
-    xf_font: List[int] = []
-    xf_fmt: List[int] = []
+    xfs: List[_XfStyle] = []
     fmt_codes: Dict[int, str] = {}
     sheets: List[Tuple[str, int]] = []  # (이름, BOF 절대 오프셋)
+    # icv 주소 공간 0..63: [0..7]=EGA, [8..63]=기본 표 56개
+    palette: List[Tuple[int, int, int]] = (
+        list(_DEFAULT_PALETTE[:8]) + list(_DEFAULT_PALETTE))
 
     records = list(_iter_biff(data))
     if not records or records[0][0] != _R_BOF:
@@ -214,16 +262,37 @@ def xls_to_xlsx(content: bytes) -> bytes:
             elif rtype == _R_FONT:
                 f = _Font()
                 if rlen >= 8:
-                    height, grbit, _icv, weight = struct.unpack_from(
+                    height, grbit, icv, weight = struct.unpack_from(
                         "<HHHH", data, bstart)
                     f.size_pt = max(1.0, height / 20.0)
                     f.italic = bool(grbit & 0x0002)
+                    f.strike = bool(grbit & 0x0008)
                     f.bold = weight >= 600
+                    if icv not in (0x7FFF,):  # 자동색 제외
+                        f.color_icv = icv
+                if rlen >= 11:
+                    f.underline = data[bstart + 10] != 0
                 fonts.append(f)
             elif rtype == _R_XF and rlen >= 4:
-                ifnt, ifmt = struct.unpack_from("<HH", data, bstart)
-                xf_font.append(ifnt)
-                xf_fmt.append(ifmt)
+                # BIFF8 XF (xlrd formatting.handle_xf 대조):
+                # @0 ifnt, @2 ifmt, @6 alc(0-2)/fWrap(3)/alcV(4-6),
+                # @14 INT32 의 bits26-31 = fill_pattern, @18 UINT16 의
+                # bits0-6 = 패턴 전경색 icv
+                xf = _XfStyle()
+                xf.ifnt, xf.ifmt = struct.unpack_from("<HH", data, bstart)
+                if rlen >= 20:
+                    alc = data[bstart + 6]
+                    xf.halign = _HALIGN.get(alc & 0x07)
+                    xf.wrap = bool(alc & 0x08)
+                    valign = (alc >> 4) & 0x07
+                    if valign != 2:  # bottom 이 기본값 — 소음 줄이기
+                        xf.valign = _VALIGN.get(valign)
+                    (brdbkg2,) = struct.unpack_from("<I", data, bstart + 14)
+                    pattern = (brdbkg2 >> 26) & 0x3F
+                    if pattern == 1:  # solid
+                        (bkg3,) = struct.unpack_from("<H", data, bstart + 18)
+                        xf.fill_icv = bkg3 & 0x7F
+                xfs.append(xf)
             elif rtype == _R_FORMAT and rlen >= 5:
                 (ifmt,) = struct.unpack_from("<H", data, bstart)
                 cch, flags = struct.unpack_from("<HB", data, bstart + 2)
@@ -231,6 +300,14 @@ def xls_to_xlsx(content: bytes) -> bytes:
                 code = (data[p:p + cch * 2].decode("utf-16le", errors="replace")
                         if flags & 0x01 else data[p:p + cch].decode("latin-1"))
                 fmt_codes[ifmt] = code
+            elif rtype == _R_PALETTE and rlen >= 2:
+                (cnt,) = struct.unpack_from("<H", data, bstart)
+                for k in range(min(cnt, 56)):
+                    off = bstart + 2 + k * 4
+                    if off + 4 > bstart + rlen:
+                        break
+                    r_, g_, b_ = data[off], data[off + 1], data[off + 2]
+                    palette[8 + k] = (r_, g_, b_)
             elif rtype == _R_BOUNDSHEET and rlen >= 8:
                 (bof_pos,) = struct.unpack_from("<I", data, bstart)
                 name, _ = _decode_short_unicode(data, bstart + 6)
@@ -240,22 +317,30 @@ def xls_to_xlsx(content: bytes) -> bytes:
     if not sheets:
         raise LegacyConvertError("xls 에 시트가 없습니다")
 
-    def font_of_xf(ixfe: int) -> Optional[_Font]:
-        if not (0 <= ixfe < len(xf_font)):
+    def xf_of(ixfe: int) -> Optional[_XfStyle]:
+        return xfs[ixfe] if 0 <= ixfe < len(xfs) else None
+
+    def font_of_xf(xf: Optional[_XfStyle]) -> Optional[_Font]:
+        if xf is None:
             return None
-        ifnt = xf_font[ixfe]
+        ifnt = xf.ifnt
         # BIFF 규약: 폰트 인덱스 4는 존재하지 않는다 — 5 이상은 1 당긴다.
         if ifnt >= 4:
             ifnt -= 1
         return fonts[ifnt] if 0 <= ifnt < len(fonts) else None
 
-    def fmt_of_xf(ixfe: int) -> Optional[str]:
-        if not (0 <= ixfe < len(xf_fmt)):
+    def fmt_of_xf(xf: Optional[_XfStyle]) -> Optional[str]:
+        if xf is None:
             return None
-        ifmt = xf_fmt[ixfe]
-        if ifmt in fmt_codes:
-            return fmt_codes[ifmt]
-        return BUILTIN_FORMATS.get(ifmt)
+        if xf.ifmt in fmt_codes:
+            return fmt_codes[xf.ifmt]
+        return BUILTIN_FORMATS.get(xf.ifmt)
+
+    def hex_of_icv(icv: Optional[int]) -> Optional[str]:
+        if icv is None or not (0 <= icv < len(palette)):
+            return None
+        r_, g_, b_ = palette[icv]
+        return f"{r_:02X}{g_:02X}{b_:02X}"
 
     # ── 시트 서브스트림 ─────────────────────────────────────────
     wb = Workbook()
@@ -267,12 +352,28 @@ def xls_to_xlsx(content: bytes) -> bytes:
 
         def put(r: int, c: int, ixfe: int, value) -> None:
             cell = ws.cell(row=r + 1, column=c + 1, value=value)
-            f = font_of_xf(ixfe)
-            if f and (f.bold or f.italic or abs(f.size_pt - 10.0) > 0.01):
-                cell.font = XlFont(bold=f.bold, italic=f.italic, size=f.size_pt)
-            code = fmt_of_xf(ixfe)
+            xf = xf_of(ixfe)
+            f = font_of_xf(xf)
+            if f and (f.bold or f.italic or f.underline or f.strike
+                      or f.color_icv is not None or abs(f.size_pt - 10.0) > 0.01):
+                cell.font = XlFont(
+                    bold=f.bold, italic=f.italic, size=f.size_pt,
+                    underline="single" if f.underline else None,
+                    strike=f.strike or None,
+                    color=hex_of_icv(f.color_icv),
+                )
+            code = fmt_of_xf(xf)
             if code and code.lower() != "general":
                 cell.number_format = code
+            if xf is not None:
+                if xf.halign or xf.valign or xf.wrap:
+                    cell.alignment = XlAlignment(
+                        horizontal=xf.halign, vertical=xf.valign,
+                        wrap_text=xf.wrap or None)
+                bg = hex_of_icv(xf.fill_icv)
+                if bg and bg != "FFFFFF":
+                    cell.fill = XlPatternFill(
+                        fill_type="solid", fgColor=bg)
 
         for rtype, bstart, rlen, _rpos in _iter_biff(data, bof_pos):
             if rtype == _R_EOF:

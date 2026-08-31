@@ -139,6 +139,58 @@ class TestTableFidelity:
         heights = [float(h) for h in re.findall(r'<rect [^>]*height="([\d.]+)"', joined)]
         assert any(abs(h - 200.0) < 1.0 for h in heights)
 
+    def test_tc_borders_nil_and_dashed(self):
+        from docx import Document
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+
+        doc = Document()
+        t = doc.add_table(rows=1, cols=2)
+        t.cell(0, 0).text = "테두리없음"
+        t.cell(0, 1).text = "대시"
+
+        def borders(cell, val):
+            tc_pr = cell._tc.get_or_add_tcPr()
+            tcb = OxmlElement("w:tcBorders")
+            tc_pr.append(tcb)
+            for side in ("left", "right", "top", "bottom"):
+                el = OxmlElement(f"w:{side}")
+                el.set(qn("w:val"), val)
+                el.set(qn("w:sz"), "8")
+                el.set(qn("w:color"), "FF0000")
+                tcb.append(el)
+
+        borders(t.cell(0, 0), "nil")
+        borders(t.cell(0, 1), "dashed")
+        joined = "".join(docx_to_page_svgs(_docx_bytes(doc)))
+        assert 'stroke-dasharray="6 3"' in joined      # 대시 변
+        assert joined.count('stroke="#FF0000"') == 4   # 대시 셀 4변만 (nil 은 0변)
+
+    def test_paragraph_spacing_expands_flow(self):
+        import re
+
+        from docx import Document
+
+        doc = Document()
+        a = doc.add_paragraph("첫문장")
+        b = doc.add_paragraph("둘문장")
+        base = "".join(docx_to_page_svgs(_docx_bytes(doc)))
+
+        doc2 = Document()
+        a2 = doc2.add_paragraph("첫문장")
+        a2.paragraph_format.line_spacing = 2.0
+        doc2.add_paragraph("둘문장")
+        spaced = "".join(docx_to_page_svgs(_docx_bytes(doc2)))
+
+        def y_of(svg, text):
+            m = re.search(rf'<text [^>]*y="([\d.]+)"[^>]*>{text}', svg)
+            assert m, text
+            return float(m.group(1))
+
+        gap_base = y_of(base, "둘문장") - y_of(base, "첫문장")
+        gap_spaced = y_of(spaced, "둘문장") - y_of(spaced, "첫문장")
+        assert gap_spaced > gap_base * 1.5  # 줄간격 200% 가 흐름에 반영
+
     def test_nested_table_content_not_lost(self):
         from docx import Document
 

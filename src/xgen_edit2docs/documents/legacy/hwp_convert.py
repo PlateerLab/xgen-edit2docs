@@ -24,8 +24,10 @@ reference_data/hwpml_3.0_spec.pdf 의 구조 의미 + pyhwp binmodel 의 바이�
 - 문단: 정렬(PARA_SHAPE align), 런 스타일(글꼴/크기/굵게/기울임/밑줄/
   취소선/색 — CHAR_SHAPE 표 28/30)
 - 표(표 70~75): rows×cols 격자, **병합(colspan/rowspan → gridSpan/vMerge)**,
-  열 너비/행 높이, 셀 배경(BORDER_FILL 표 18/23), 셀 안 문단 전체 스타일,
-  중첩 표(셀 안 표 — 재귀), 캡션
+  열 너비/행 높이, 셀 배경·**변별 테두리(표 18/20/21 — 실선/대시/없음,
+  굵기, 색)**, 셀 수직 정렬(표 60 listflags), 셀 안쪽 여백(표 75 → tcMar),
+  셀 안 문단 전체 스타일, 중첩 표(셀 안 표 — 재귀), 캡션
+- 문단 간격: 줄간격(표 38 RATIO)·문단 앞/뒤 간격 → w:spacing
 - 그림(표 102): BinData 임베딩 → docx 인라인 이미지 (개체 요소 크기 반영)
 - 글상자: 텍스트를 본문 문단으로 (위치는 범위 밖 — 내용 유실 없음)
 - 머리말/꼬리말: 첫 정의를 docx 섹션 header/footer 텍스트로
@@ -99,12 +101,34 @@ class _CharShape:
 
 
 @dataclass
+class _BorderSide:
+    """표 20/21 테두리선 — stroke 0 = 선 없음."""
+    stroke: int = 1
+    width_mm: float = 0.12
+    color: str = "000000"
+
+
+@dataclass
+class _BorderFill:
+    """표 18 테두리/배경 — 좌/우/상/하 선 + 배경색."""
+    bg: Optional[str] = None
+    sides: Optional[List[_BorderSide]] = None  # [left, right, top, bottom]
+
+
+@dataclass
+class _ParaProps:
+    """표 38 문단 모양 — 렌더에 실리는 부분집합."""
+    align: str = "left"
+    line_spacing: Optional[float] = None  # 배수 (RATIO 형만)
+    space_before_pt: float = 0.0
+    space_after_pt: float = 0.0
+
+
+@dataclass
 class _DocInfo:
     char_shapes: List[_CharShape] = field(default_factory=list)
-    #: PARA_SHAPE align — 'left' | 'center' | 'right' | 'justify'
-    para_aligns: List[str] = field(default_factory=list)
-    #: BORDER_FILL → 배경색 RRGGBB (채우기 없음/흰색은 None)
-    border_fill_bg: List[Optional[str]] = field(default_factory=list)
+    para_shapes: List[_ParaProps] = field(default_factory=list)
+    border_fills: List[_BorderFill] = field(default_factory=list)
     #: 한글(ko) 글꼴 이름 목록 — CHAR_SHAPE face_id 가 가리킨다.
     ko_faces: List[str] = field(default_factory=list)
     #: BIN_DATA 레코드 순서(1-based id) → (storage_id, ext). 링크형은 None.
@@ -153,24 +177,56 @@ _ALIGN_MAP = {0: "justify", 1: "left", 2: "right", 3: "center",
               4: "justify", 5: "justify"}
 
 
-def _parse_para_shape(payload: bytes) -> str:
+def _parse_para_shape(payload: bytes) -> _ParaProps:
+    """표 38: flags(4) margins×4(doubled, 1/7200in ×2) @4..20,
+    linespacing @24 (flags bits0-1: 0=RATIO %, 1=FIXED …)."""
+    pp = _ParaProps()
     if len(payload) >= 4:
         (flags,) = struct.unpack_from("<I", payload, 0)
-        return _ALIGN_MAP.get((flags >> 2) & 0x7, "left")
-    return "left"
+        pp.align = _ALIGN_MAP.get((flags >> 2) & 0x7, "left")
+        if len(payload) >= 28:
+            top2, bottom2, ls = struct.unpack_from("<3i", payload, 16)
+            # doubled margin: 1/7200 inch × 2 → pt = v/2 × 72/7200 = v/200
+            if 0 < top2 <= 7200 * 8:
+                pp.space_before_pt = top2 / 200.0
+            if 0 < bottom2 <= 7200 * 8:
+                pp.space_after_pt = bottom2 / 200.0
+            if (flags & 0x3) == 0 and 50 <= ls <= 500:  # RATIO(%)
+                pp.line_spacing = ls / 100.0
+    return pp
 
 
-def _parse_border_fill(payload: bytes) -> Optional[str]:
-    """표 18: borderflags(2) + Border(6)×5 = 32, fillflags UINT32 @32,
-    colorpattern 이면 background COLORREF @36."""
+#: 표 21 테두리선 굵기 인덱스 → mm (pyhwp Border.widths)
+_BORDER_WIDTH_MM = (0.1, 0.12, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5,
+                    0.6, 0.7, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0)
+
+
+def _parse_border_fill(payload: bytes) -> _BorderFill:
+    """표 18: borderflags(2) + Border(stroke 1B, width 1B, COLORREF 4B)×5
+    (좌/우/상/하/대각) = 32, fillflags UINT32 @32, colorpattern 이면
+    background COLORREF @36."""
+    bf = _BorderFill()
+    if len(payload) >= 32:
+        sides: List[_BorderSide] = []
+        for k in range(4):  # left, right, top, bottom (대각선은 범위 밖)
+            off = 2 + k * 6
+            stroke = payload[off] & 0x1F
+            width_idx = payload[off + 1] & 0x0F
+            (colorref,) = struct.unpack_from("<I", payload, off + 2)
+            r, g, b = colorref & 0xFF, (colorref >> 8) & 0xFF, (colorref >> 16) & 0xFF
+            sides.append(_BorderSide(
+                stroke=stroke,
+                width_mm=_BORDER_WIDTH_MM[width_idx],
+                color=f"{r:02X}{g:02X}{b:02X}"))
+        bf.sides = sides
     if len(payload) >= 40:
         (fillflags,) = struct.unpack_from("<I", payload, 32)
         if fillflags & 0x1:
             (colorref,) = struct.unpack_from("<I", payload, 36)
             r, g, b = colorref & 0xFF, (colorref >> 8) & 0xFF, (colorref >> 16) & 0xFF
             if (r, g, b) != (255, 255, 255):
-                return f"{r:02X}{g:02X}{b:02X}"
-    return None
+                bf.bg = f"{r:02X}{g:02X}{b:02X}"
+    return bf
 
 
 def _parse_bin_data(payload: bytes) -> Optional[Tuple[int, str]]:
@@ -204,11 +260,11 @@ def _parse_doc_info(data: bytes) -> _DocInfo:
             name, _ = _read_bstr(payload, 1)
             face_names.append(name)
         elif tagid == TAG_BORDER_FILL:
-            info.border_fill_bg.append(_parse_border_fill(payload))
+            info.border_fills.append(_parse_border_fill(payload))
         elif tagid == TAG_CHAR_SHAPE:
             info.char_shapes.append(_parse_char_shape(payload))
         elif tagid == TAG_PARA_SHAPE:
-            info.para_aligns.append(_parse_para_shape(payload))
+            info.para_shapes.append(_parse_para_shape(payload))
         elif tagid == TAG_BIN_DATA:
             info.bin_data.append(_parse_bin_data(payload))
     # FACE_NAME 레코드는 언어 그룹 순서(ko 먼저)로 나온다 — ko 수만큼이
@@ -245,6 +301,9 @@ class _Cell:
     width_hu: int = 0
     height_hu: int = 0
     borderfill_id: int = 0
+    valign: str = "center"  # 표 60 listflags bits5-6 — 한글 기본은 가운데
+    #: 표 75 안쪽 여백 (left,right,top,bottom) HWPUNIT16
+    padding_hu: Tuple[int, int, int, int] = (0, 0, 0, 0)
     paras: List[_Para] = field(default_factory=list)
 
 
@@ -384,6 +443,11 @@ def _parse_cell_props(payload: bytes) -> _Cell:
     행 우선 순서로 재배정한다.
     """
     c = _Cell()
+    if len(payload) >= 8:
+        # 표 60 리스트 헤더 flags @4 — bits5-6 VAlign(0 top/1 middle/2 bottom)
+        (listflags,) = struct.unpack_from("<I", payload, 4)
+        c.valign = {0: "top", 1: "center", 2: "bottom"}.get(
+            (listflags >> 5) & 0x3, "center")
     if len(payload) >= 16:
         c.col, c.row, c.colspan, c.rowspan = struct.unpack_from("<4H", payload, 8)
         c.colspan = max(1, c.colspan)
@@ -392,6 +456,8 @@ def _parse_cell_props(payload: bytes) -> _Cell:
         c.col = c.row = -1
     if len(payload) >= 24:
         c.width_hu, c.height_hu = struct.unpack_from("<2i", payload, 16)
+    if len(payload) >= 32:
+        c.padding_hu = struct.unpack_from("<4H", payload, 24)
     if len(payload) >= 34:
         (c.borderfill_id,) = struct.unpack_from("<H", payload, 32)
     return c
@@ -665,11 +731,18 @@ def hwp_to_docx(content: bytes) -> bytes:
 
         def apply_align(para_obj, para: _Para) -> None:
             pid = para.parashape_id
-            if pid is None or not (0 <= pid < len(info.para_aligns)):
+            if pid is None or not (0 <= pid < len(info.para_shapes)):
                 return
-            align = info.para_aligns[pid]
-            if align != "left":
-                para_obj.alignment = _WD_ALIGN[align]
+            pp = info.para_shapes[pid]
+            if pp.align != "left":
+                para_obj.alignment = _WD_ALIGN[pp.align]
+            pf = para_obj.paragraph_format
+            if pp.line_spacing is not None and abs(pp.line_spacing - 1.0) > 0.01:
+                pf.line_spacing = pp.line_spacing
+            if pp.space_before_pt > 0.05:
+                pf.space_before = Pt(pp.space_before_pt)
+            if pp.space_after_pt > 0.05:
+                pf.space_after = Pt(pp.space_after_pt)
 
         def emit_runs(para_obj, para: _Para) -> None:
             text = para.text
@@ -718,6 +791,54 @@ def hwp_to_docx(content: bytes) -> bytes:
                 tc_pr.append(shd)
             shd.set(qn("w:val"), "clear")
             shd.set(qn("w:fill"), rgb)
+
+        #: 표 20 stroke → docx 테두리 val (0 = 선 없음 → nil)
+        _STROKE_VAL = {0: "nil", 1: "single", 2: "dashed", 3: "dotted",
+                       4: "dotDash", 5: "dotDotDash", 6: "dashed",
+                       7: "dotted", 8: "double", 9: "double", 10: "double",
+                       11: "triple", 12: "wave", 13: "doubleWave"}
+
+        def set_cell_borders(cell_obj, sides: List[_BorderSide]) -> None:
+            """표 18 좌/우/상/하 → w:tcBorders (sz = 1/8pt)."""
+            tc_pr = cell_obj._tc.get_or_add_tcPr()
+            borders = tc_pr.find(qn("w:tcBorders"))
+            if borders is None:
+                borders = OxmlElement("w:tcBorders")
+                tc_pr.append(borders)
+            for name, side in zip(("left", "right", "top", "bottom"), sides):
+                el = borders.find(qn(f"w:{name}"))
+                if el is None:
+                    el = OxmlElement(f"w:{name}")
+                    borders.append(el)
+                el.set(qn("w:val"), _STROKE_VAL.get(side.stroke, "single"))
+                # mm → pt(×72/25.4) → 1/8pt
+                el.set(qn("w:sz"), str(max(2, int(round(side.width_mm * 72 / 25.4 * 8)))))
+                el.set(qn("w:color"), side.color)
+
+        def set_cell_margins(cell_obj, padding_hu: Tuple[int, int, int, int]) -> None:
+            """표 75 안쪽 여백 → w:tcMar (twips = hwpunit/5)."""
+            if not any(padding_hu):
+                return
+            tc_pr = cell_obj._tc.get_or_add_tcPr()
+            mar = tc_pr.find(qn("w:tcMar"))
+            if mar is None:
+                mar = OxmlElement("w:tcMar")
+                tc_pr.append(mar)
+            for name, hu in zip(("left", "right", "top", "bottom"), padding_hu):
+                el = OxmlElement(f"w:{name}")
+                el.set(qn("w:w"), str(int(hu / 5)))
+                el.set(qn("w:type"), "dxa")
+                mar.append(el)
+
+        def set_cell_valign(cell_obj, valign: str) -> None:
+            if valign == "top":
+                return  # docx 기본
+            tc_pr = cell_obj._tc.get_or_add_tcPr()
+            va = tc_pr.find(qn("w:vAlign"))
+            if va is None:
+                va = OxmlElement("w:vAlign")
+                tc_pr.append(va)
+            va.set(qn("w:val"), valign)
 
         def fill_cell_paras(cell_obj, paras: List[_Para]) -> None:
             first = True
@@ -785,11 +906,16 @@ def hwp_to_docx(content: bytes) -> bytes:
                     cell_obj = tbl.cell(cell.row, cell.col)
                 except Exception:  # noqa: BLE001
                     continue
-                bg = None
-                if 0 <= cell.borderfill_id - 1 < len(info.border_fill_bg):
-                    bg = info.border_fill_bg[cell.borderfill_id - 1]
-                if bg:
-                    set_cell_bg(cell_obj, bg)
+                bf = None
+                if 0 <= cell.borderfill_id - 1 < len(info.border_fills):
+                    bf = info.border_fills[cell.borderfill_id - 1]
+                if bf is not None:
+                    if bf.bg:
+                        set_cell_bg(cell_obj, bf.bg)
+                    if bf.sides is not None:
+                        set_cell_borders(cell_obj, bf.sides)
+                set_cell_valign(cell_obj, cell.valign)
+                set_cell_margins(cell_obj, cell.padding_hu)
                 fill_cell_paras(cell_obj, cell.paras)
             for cap in block.caption:
                 p = doc.add_paragraph() if container_cell is None \

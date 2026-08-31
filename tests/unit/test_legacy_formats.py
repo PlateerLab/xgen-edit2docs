@@ -242,6 +242,138 @@ def make_hwp(text: str = "한글 렌더 검증", bold_text: str = "굵은 부분
     })
 
 
+def _tiny_png() -> bytes:
+    """1×1 RGB PNG — CRC 까지 규격대로 조립한다."""
+    def chunk(kind: bytes, body: bytes) -> bytes:
+        return (struct.pack(">I", len(body)) + kind + body
+                + struct.pack(">I", zlib.crc32(kind + body) & 0xFFFFFFFF))
+
+    ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+    idat = zlib.compress(b"\x00\xff\x00\x00")  # filter 0 + RGB(255,0,0)
+    return (b"\x89PNG\r\n\x1a\x0a" + chunk(b"IHDR", ihdr)
+            + chunk(b"IDAT", idat) + chunk(b"IEND", b""))
+
+
+def make_hwp_rich() -> bytes:
+    """심화 픽스처 — 병합/배경/정렬/취소선/글꼴/이미지/머리말을 전부 싣는다.
+
+    실파일 규격 그대로: 컨트롤(CTRL_HEADER)은 앵커 문단의 자식 레벨,
+    셀 LIST_HEADER 는 표 75 셀 속성(col/row/colspan/rowspan/크기/borderfill)
+    을 온전히 갖는다.
+    """
+    header = bytearray(256)
+    header[0:32] = b"HWP Document File".ljust(32, b"\x00")
+    struct.pack_into("<I", header, 32, 0x05000000)
+    struct.pack_into("<I", header, 36, 0x1)  # compressed
+
+    def bstr(s: str) -> bytes:
+        return struct.pack("<H", len(s)) + s.encode("utf-16le")
+
+    # ── DocInfo ──
+    id_mappings = struct.pack("<8i", 1, 1, 0, 0, 0, 0, 0, 0)  # binData 1, ko 글꼴 1
+    bin_data = struct.pack("<HH", 0x1, 1) + bstr("png")       # EMBEDDING, id 1
+    face = b"\x00" + bstr("함초롬돋움")
+
+    def border_fill(bg_colorref: int | None) -> bytes:
+        p = bytearray(44)
+        if bg_colorref is not None:
+            struct.pack_into("<I", p, 32, 0x1)            # fillflags: colorpattern
+            struct.pack_into("<I", p, 36, bg_colorref)    # background COLORREF
+        return bytes(p)
+
+    def char_shape(size_pt: float, flags: int, color_bgr: int) -> bytes:
+        p = bytearray(72)
+        struct.pack_into("<H", p, 0, 0)  # ko face id 0
+        struct.pack_into("<i", p, 42, int(size_pt * 100))
+        struct.pack_into("<I", p, 46, flags)
+        struct.pack_into("<I", p, 52, color_bgr)
+        return bytes(p)
+
+    def para_shape(align: int) -> bytes:
+        return struct.pack("<I", align << 2) + b"\x00" * 40
+
+    docinfo = b"".join([
+        _rec(0x11, 0, id_mappings),
+        _rec(0x12, 0, bin_data),
+        _rec(0x13, 0, face),
+        _rec(0x14, 0, border_fill(None)),          # borderfill id 1
+        _rec(0x14, 0, border_fill(0x00CCFF)),      # id 2 — 배경 #FFCC00
+        _rec(0x15, 0, char_shape(10.0, 0x0, 0x000000)),        # 0 보통
+        _rec(0x15, 0, char_shape(12.0, 0x2 << 2, 0x0000FF)),   # 1 취소선+빨강
+        _rec(0x15, 0, char_shape(14.0, 0x2, 0x000000)),        # 2 굵게
+        _rec(0x19, 0, para_shape(1)),  # parashape 0: left
+        _rec(0x19, 0, para_shape(3)),  # parashape 1: center
+    ])
+
+    # ── Section0 ──
+    def para_header(parashape_id: int) -> bytes:
+        p = bytearray(16)
+        struct.pack_into("<H", p, 8, parashape_id)
+        return bytes(p)
+
+    def cell_props(col: int, row: int, colspan: int, rowspan: int,
+                   w: int, h: int, borderfill: int) -> bytes:
+        p = bytearray(40)
+        struct.pack_into("<4H", p, 8, col, row, colspan, rowspan)
+        struct.pack_into("<2i", p, 16, w, h)
+        struct.pack_into("<H", p, 32, borderfill)
+        return bytes(p)
+
+    def cell(level: int, props: bytes, text: str) -> bytes:
+        return b"".join([
+            _rec(0x48, level, props),
+            _rec(0x42, level + 1, para_header(0)),
+            _rec(0x43, level + 2, _utf16(text)),
+            _rec(0x44, level + 2, struct.pack("<II", 0, 0)),
+        ])
+
+    page = struct.pack("<6I", 59528, 84188, 8504, 8504, 5668, 4252) + b"\x00" * 16
+    table_rec = struct.pack("<I", 0) + struct.pack("<HH", 2, 3) + b"\x00" * 16
+    shape_comp = bytearray(36)
+    struct.pack_into("<2i", shape_comp, 28, 14400, 7200)  # 2in × 1in
+    shape_pic = bytearray(76)
+    struct.pack_into("<H", shape_pic, 71, 1)  # bindata_id 1
+
+    section = b"".join([
+        _rec(0x49, 1, page),
+        # 앵커 문단 — 가운데 정렬(parashape 1) + 취소선 런(charshape 1)
+        _rec(0x42, 0, para_header(1)),
+        _rec(0x43, 1, _utf16("가운데 취소선")),
+        _rec(0x44, 1, struct.pack("<II", 0, 1)),
+        # 표 2×3: (0,0) colspan2 배경, (0,2) rowspan2, (1,0), (1,1)
+        _rec(0x47, 1, b" lbt" + b"\x00" * 8),
+        _rec(0x4D, 2, table_rec),
+        cell(2, cell_props(0, 0, 2, 1, 16000, 2000, 2), "병합 머리"),
+        cell(2, cell_props(2, 0, 1, 2, 8000, 2000, 1), "세로 병합"),
+        cell(2, cell_props(0, 1, 1, 1, 8000, 2000, 1), "좌"),
+        cell(2, cell_props(1, 1, 1, 1, 8000, 2000, 1), "우"),
+        # 그림 개체 (gso) — BinData/BIN0001.png
+        _rec(0x47, 1, b" osg" + b"\x00" * 8),
+        _rec(0x4C, 2, bytes(shape_comp)),
+        _rec(0x55, 3, bytes(shape_pic)),
+        # 머리말
+        _rec(0x47, 1, b"daeh" + b"\x00" * 8),
+        _rec(0x48, 2, b"\x00" * 8),
+        _rec(0x42, 3, para_header(0)),
+        _rec(0x43, 4, _utf16("머리말 텍스트")),
+        # 본문 두 번째 문단 — 굵게(charshape 2), 글꼴 참조
+        _rec(0x42, 0, para_header(0)),
+        _rec(0x43, 1, _utf16("본문 끝")),
+        _rec(0x44, 1, struct.pack("<II", 0, 2)),
+    ])
+
+    def comp(b: bytes) -> bytes:
+        co = zlib.compressobj(6, zlib.DEFLATED, -15)
+        return co.compress(b) + co.flush()
+
+    return build_cfb({
+        "FileHeader": bytes(header),
+        "DocInfo": comp(docinfo),
+        "BodyText/Section0": comp(section),
+        "BinData/BIN0001.png": comp(_tiny_png()),
+    })
+
+
 def make_hwpx(text: str = "HWPX 본문", cell: str = "표셀") -> bytes:
     header_xml = """<?xml version="1.0" encoding="UTF-8"?>
 <hh:head xmlns:hh="http://www.hancom.co.kr/hwpml/2011/head">
@@ -404,6 +536,76 @@ class TestHwp:
     def test_non_hwp_bytes_are_refused(self):
         with pytest.raises(LegacyConvertError):
             convert_to_ooxml(b"not an ole file at all", "hwp")
+
+
+@pytest.fixture(scope="module")
+def rich_docx():
+    from docx import Document
+
+    docx_bytes, fmt = convert_to_ooxml(make_hwp_rich(), "hwp")
+    assert fmt == "docx"
+    return Document(io.BytesIO(docx_bytes))
+
+
+class TestHwpFidelity:
+    """심화 충실도 — 표 75 병합/배경, 표 38 정렬, 표 28 취소선·글꼴,
+    표 102 그림, 머리말. 픽스처는 make_hwp_rich (실파일 레벨 배치)."""
+
+    def test_colspan_merge(self, rich_docx):
+        tbl = rich_docx.tables[0]
+        assert tbl.cell(0, 0).text.strip() == "병합 머리"
+        xml = tbl._tbl.xml
+        assert 'gridSpan' in xml and 'w:val="2"' in xml
+        # 병합 셀과 (0,1) 이 같은 tc 를 공유한다
+        assert tbl.cell(0, 0)._tc is tbl.cell(0, 1)._tc
+
+    def test_rowspan_merge(self, rich_docx):
+        tbl = rich_docx.tables[0]
+        assert tbl.cell(0, 2).text.strip() == "세로 병합"
+        assert 'vMerge' in tbl._tbl.xml
+        assert tbl.cell(0, 2)._tc is tbl.cell(1, 2)._tc
+
+    def test_cell_background_from_borderfill(self, rich_docx):
+        # borderfill id 2 = COLORREF 0x00CCFF → #FFCC00
+        assert 'FFCC00' in rich_docx.tables[0]._tbl.xml
+
+    def test_paragraph_alignment(self, rich_docx):
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+        first = rich_docx.paragraphs[0]
+        assert first.text == "가운데 취소선"
+        assert first.alignment == WD_ALIGN_PARAGRAPH.CENTER
+
+    def test_strike_color_and_face(self, rich_docx):
+        run = rich_docx.paragraphs[0].runs[0]
+        assert run.font.strike
+        assert str(run.font.color.rgb) == "FF0000"
+        assert run.font.name == "함초롬돋움"
+        last = [p for p in rich_docx.paragraphs if p.text == "본문 끝"][0]
+        assert last.runs[0].bold
+
+    def test_image_embedded_with_size(self, rich_docx):
+        shapes = rich_docx.inline_shapes
+        assert len(shapes) == 1
+        # 14400×7200 HWPUNIT = 2in × 1in
+        assert abs(shapes[0].width - 914400 * 2) < 2000
+        assert abs(shapes[0].height - 914400) < 2000
+
+    def test_header_text(self, rich_docx):
+        assert "머리말 텍스트" in rich_docx.sections[0].header.paragraphs[0].text
+
+    def test_column_widths_reach_grid(self, rich_docx):
+        xml = rich_docx.tables[0]._tbl.xml
+        assert "gridCol" in xml
+
+    def test_e2e_svg_render(self, tmp_path):
+        svg = _render_svg_pages(tmp_path, "rich.hwp", make_hwp_rich())
+        assert "병합 머리" in svg and svg.count("병합 머리") == 1
+        assert "세로 병합" in svg
+        assert "#FFCC00" in svg          # 셀 배경
+        assert "line-through" in svg     # 취소선
+        assert "<image" in svg           # 그림 개체
+        assert "머리말 텍스트" in svg    # 머리말
 
 
 class TestHwpx:

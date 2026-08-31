@@ -457,15 +457,28 @@ def analyze_pptx(pptx: str | Path | bytes) -> dict:
 
 _DOC_FORMATS = ("pptx", "docx", "xlsx")
 
+#: 레거시/한글 포맷 — documents/legacy 의 네이티브 파서가 OOXML 로 정규화한
+#: 뒤 같은 페이지 엔진으로 렌더된다 (hwp/hwpx/doc→docx, xls→xlsx, ppt→pptx).
+_LEGACY_FORMATS = ("hwp", "hwpx", "doc", "xls", "ppt")
+
 
 def _fmt_of(path: str | Path) -> str:
     suffix = Path(path).suffix.lower().lstrip(".")
-    if suffix not in _DOC_FORMATS:
+    if suffix not in _DOC_FORMATS and suffix not in _LEGACY_FORMATS:
         raise ValueError(
             f"Unsupported document format: {Path(path).name} "
-            f"(supported: {', '.join('.' + f for f in _DOC_FORMATS)})"
+            f"(supported: {', '.join('.' + f for f in _DOC_FORMATS + _LEGACY_FORMATS)})"
         )
     return suffix
+
+
+def _normalize_legacy(doc: str | Path) -> Path:
+    """레거시 포맷이면 OOXML 사본 경로를, 아니면 원본 경로를 돌려준다."""
+    if Path(doc).suffix.lower().lstrip(".") in _LEGACY_FORMATS:
+        from .documents.legacy import normalize_to_ooxml
+
+        return normalize_to_ooxml(doc)
+    return Path(doc)
 
 
 def render_doc(
@@ -496,6 +509,8 @@ def render_doc(
     Returns:
         :class:`RenderResult` with the written file paths.
     """
+    _fmt_of(doc)  # 확장자 검증 (레거시 포함)
+    doc = _normalize_legacy(doc)
     fmt = _fmt_of(doc)
     to = (to or "png").strip().lower()
     if to not in ("png", "pdf", "svg", "md"):
@@ -673,8 +688,11 @@ def preview_doc(
 
     .pptx -> list of self-contained slide SVGs (strings, or files with
     ``out_dir``) · .docx / .xlsx -> a markdown rendering (string, or a
-    ``preview.md`` file with ``out_dir``).
+    ``preview.md`` file with ``out_dir``). 레거시 포맷(hwp/hwpx/doc/xls/ppt)
+    은 OOXML 로 정규화된 뒤 같은 경로를 탄다.
     """
+    _fmt_of(doc)
+    doc = _normalize_legacy(doc)
     fmt = _fmt_of(doc)
     if fmt == "pptx":
         return preview_pptx(doc, out_dir=out_dir)

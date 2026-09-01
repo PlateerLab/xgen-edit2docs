@@ -190,6 +190,13 @@ _HALIGN = {1: "left", 2: "center", 3: "right", 5: "justify", 6: "centerContinuou
 _VALIGN = {0: "top", 1: "center", 2: "bottom", 3: "justify"}
 
 
+#: BIFF 테두리 line style → openpyxl style
+_BORDER_STYLE = {1: "thin", 2: "medium", 3: "dashed", 4: "dotted",
+                 5: "thick", 6: "double", 7: "hair", 8: "mediumDashed",
+                 9: "dashDot", 10: "mediumDashDot", 11: "dashDotDot",
+                 12: "mediumDashDotDot", 13: "slantDashDot"}
+
+
 @dataclass
 class _XfStyle:
     ifnt: int = 0
@@ -198,14 +205,18 @@ class _XfStyle:
     valign: Optional[str] = None
     wrap: bool = False
     fill_icv: Optional[int] = None  # solid 패턴의 전경색 icv
+    #: side → (openpyxl style, icv) — 선 없는 변은 없음.
+    borders: Optional[Dict[str, Tuple[str, int]]] = None
 
 
 def xls_to_xlsx(content: bytes) -> bytes:
     import olefile
     from openpyxl import Workbook
     from openpyxl.styles import Alignment as XlAlignment
+    from openpyxl.styles import Border as XlBorder
     from openpyxl.styles import Font as XlFont
     from openpyxl.styles import PatternFill as XlPatternFill
+    from openpyxl.styles import Side as XlSide
     from openpyxl.styles.numbers import BUILTIN_FORMATS
     from openpyxl.utils import get_column_letter
 
@@ -287,7 +298,27 @@ def xls_to_xlsx(content: bytes) -> bytes:
                     valign = (alc >> 4) & 0x07
                     if valign != 2:  # bottom 이 기본값 — 소음 줄이기
                         xf.valign = _VALIGN.get(valign)
+                    (brdbkg1,) = struct.unpack_from("<I", data, bstart + 10)
                     (brdbkg2,) = struct.unpack_from("<I", data, bstart + 14)
+                    styles = {
+                        "left": brdbkg1 & 0xF,
+                        "right": (brdbkg1 >> 4) & 0xF,
+                        "top": (brdbkg1 >> 8) & 0xF,
+                        "bottom": (brdbkg1 >> 12) & 0xF,
+                    }
+                    colors = {
+                        "left": (brdbkg1 >> 16) & 0x7F,
+                        "right": (brdbkg1 >> 23) & 0x7F,
+                        "top": brdbkg2 & 0x7F,
+                        "bottom": (brdbkg2 >> 7) & 0x7F,
+                    }
+                    borders = {
+                        side: (_BORDER_STYLE[st], colors[side])
+                        for side, st in styles.items()
+                        if st in _BORDER_STYLE
+                    }
+                    if borders:
+                        xf.borders = borders
                     pattern = (brdbkg2 >> 26) & 0x3F
                     if pattern == 1:  # solid
                         (bkg3,) = struct.unpack_from("<H", data, bstart + 18)
@@ -374,6 +405,12 @@ def xls_to_xlsx(content: bytes) -> bytes:
                 if bg and bg != "FFFFFF":
                     cell.fill = XlPatternFill(
                         fill_type="solid", fgColor=bg)
+                if xf.borders:
+                    sides = {}
+                    for name, (style, icv) in xf.borders.items():
+                        sides[name] = XlSide(
+                            border_style=style, color=hex_of_icv(icv) or "000000")
+                    cell.border = XlBorder(**sides)
 
         for rtype, bstart, rlen, _rpos in _iter_biff(data, bof_pos):
             if rtype == _R_EOF:

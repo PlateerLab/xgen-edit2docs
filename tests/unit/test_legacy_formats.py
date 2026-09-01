@@ -606,6 +606,40 @@ def make_doc_rich() -> bytes:
     sprm_jc = struct.pack("<HB", 0x2403, 1)
     sprm_intbl = struct.pack("<HB", 0x2416, 1)
     sprm_ttp = struct.pack("<HB", 0x2417, 1)
+
+    def brc(dpt: int, btype: int, ico: int) -> bytes:
+        return struct.pack("<2H", dpt | (btype << 8), ico)
+
+    def tc80(rgf: int, top, left, bottom, right) -> bytes:
+        return struct.pack("<2H", rgf, 0) + top + left + bottom + right
+
+    solid = brc(4, 1, 1)
+
+    def tdef(tcs: list[bytes]) -> bytes:
+        # itcMac + (itc+1)×경계(0/2880/5760 twips) + TC80×itc
+        body = bytes([len(tcs)])
+        body += struct.pack(f"<{len(tcs) + 1}h",
+                            *[i * 2880 for i in range(len(tcs) + 1)])
+        body += b"".join(tcs)
+        return struct.pack("<HH", 0xD608, len(body) + 1) + body
+
+    # 행 1: tc0 = 세로병합 시작 + 세로 가운데 + 상변 이중선, tc1 = 좌변 없음
+    tdef_row1 = tdef([
+        tc80(0x0040 | (1 << 7), brc(8, 3, 1), solid, solid, solid),
+        tc80(0, solid, brc(0, 0, 0), solid, solid),
+    ])
+    # 행 2: tc0 = 세로병합 연속
+    tdef_row2 = tdef([
+        tc80(0x0020, solid, solid, solid, solid),
+        tc80(0, solid, solid, solid, solid),
+    ])
+    # 셰이딩: tc1 = solid 빨강 (SHD80: icoFore=6, ipat=1).
+    # 0xD609 는 spra=6 의 일반형 — 길이가 1바이트다 (0xD608 만 2바이트 예외).
+    shd_row1 = (struct.pack("<H", 0xD609) + bytes([4])
+                + struct.pack("<2H", 0, 6 | (1 << 10)))
+    # 끝문단: 앞 간격 240tw(12pt) + 줄간격 200% (LSPD 480, fMult 1)
+    sprm_before = struct.pack("<HH", 0xA413, 240)
+    sprm_line = struct.pack("<Hhh", 0x6412, 480, 1)
     # cp 배치: "제목 가운데\r"=0..6, "굵은빨강취소\r"=7..13,
     # A1@14-15 \x07@16, B1@17-18 \x07@19, 행마크@20,
     # A2@21-22 \x07@23, B2@24-25 \x07@26, 행마크@27, "끝문단\r"=28..31
@@ -614,11 +648,11 @@ def make_doc_rich() -> bytes:
         (fc(7), b""),                # 문단2
         (fc(14), sprm_intbl),        # A1 셀
         (fc(17), sprm_intbl),        # B1 셀
-        (fc(20), sprm_intbl + sprm_ttp),  # 행마크1
+        (fc(20), sprm_intbl + sprm_ttp + tdef_row1 + shd_row1),  # 행마크1
         (fc(21), sprm_intbl),        # A2
         (fc(24), sprm_intbl),        # B2
-        (fc(27), sprm_intbl + sprm_ttp),  # 행마크2
-        (fc(28), b""),               # 끝문단
+        (fc(27), sprm_intbl + sprm_ttp + tdef_row2),  # 행마크2
+        (fc(28), sprm_before + sprm_line),  # 끝문단 — 간격/줄간격
     ], fc(len(body)))
 
     # FKP 페이지는 512 정렬 오프셋에 놓인다 — pn 6/7 사용 (word 0x1000 안)
@@ -671,12 +705,19 @@ def make_xls_rich() -> bytes:
     fonts = [font(200, 0, 0x7FFF, 400, 0)] * 4
     fonts.append(font(240, 0x0008, 40, 700, 1))  # 12pt bold strike underline icv40
 
-    def xf(ifnt: int, alc: int, pattern_icv: int | None) -> bytes:
+    def xf(ifnt: int, alc: int, pattern_icv: int | None,
+           with_borders: bool = False) -> bytes:
         p = bytearray(20)
         struct.pack_into("<HH", p, 0, ifnt, 0)
         p[6] = alc
+        if with_borders:
+            # xlrd handle_xf 비트 배치: 스타일 좌1(thin)/우6(double)/
+            # 상3(dashed)/하2(medium), 색 icv 40 (좌우는 brdbkg1, 상하는 brdbkg2)
+            brdbkg1 = 1 | (6 << 4) | (3 << 8) | (2 << 12) | (40 << 16) | (40 << 23)
+            struct.pack_into("<I", p, 10, brdbkg1)
         if pattern_icv is not None:
-            struct.pack_into("<i", p, 14, 1 << 26)      # solid
+            brdbkg2 = (1 << 26) | 40 | (40 << 7)  # solid + 상/하 테두리 색
+            struct.pack_into("<i", p, 14, brdbkg2)
             struct.pack_into("<H", p, 18, pattern_icv)  # 전경색 icv
         return bytes(p)
 
@@ -690,7 +731,7 @@ def make_xls_rich() -> bytes:
     globals_part += rec(0x0092, pal)
     for _ in range(15):
         globals_part += rec(0x00E0, xf(0, 0, None))
-    globals_part += rec(0x00E0, xf(5, 0x02, 40))  # ixfe 15: 가운데+채움+스타일폰트
+    globals_part += rec(0x00E0, xf(5, 0x02, 40, with_borders=True))  # ixfe 15
     globals_part += rec(0x00FC, sst_payload)
 
     sheet_cells = rec(0x00FD, struct.pack("<HHHI", 0, 0, 15, 0))
@@ -717,15 +758,25 @@ def make_ppt_rich() -> bytes:
         return struct.pack("<HHI", ver, rtype, len(payload)) + payload
 
     doc_atom = rec(1001, struct.pack("<ii", 5760, 4320) + b"\x00" * 32)
+    # FontCollection(2005) 안 FontEntityAtom(4023) — 이름 64B UTF-16
+    font_name = "돋움".encode("utf-16le")
+    font_atom = rec(4023, font_name + b"\x00" * (64 - len(font_name)) + b"\x00" * 4)
+    font_coll = rec(2005, font_atom, ver=0xF)
 
     body_text = "굵은줄\r빨강취소"
-    # 문단 런: 전체 + 1 자 — alignment(0x800)=center(1)
+    # 문단 런: 전체 + 1 자 — paraFlags(0xF: fHasBullet) + bullet.char(0x80)
+    # + alignment(0x800)=center(1). props 순서 = 마스크 표 순서.
     para_run = (struct.pack("<I", len(body_text) + 1) + struct.pack("<H", 0)
-                + struct.pack("<I", 0x800) + struct.pack("<H", 1))
-    # 문자 런 1: "굵은줄\r"(4자) — bold + size 24
+                + struct.pack("<I", 0x1 | 0x80 | 0x800)
+                + struct.pack("<H", 0x1)        # paraFlags: fHasBullet
+                + struct.pack("<H", 0x2022)     # bullet.char '•'
+                + struct.pack("<H", 1))         # alignment center
+    # 문자 런 1: "굵은줄\r"(4자) — bold + font.index 0 + size 24
     char_run1 = (struct.pack("<I", 4)
-                 + struct.pack("<I", 0x0001 | 0x20000)
-                 + struct.pack("<H", 0x0001) + struct.pack("<H", 24))
+                 + struct.pack("<I", 0x0001 | 0x10000 | 0x20000)
+                 + struct.pack("<H", 0x0001)    # charFlags: bold
+                 + struct.pack("<H", 0)         # font.index → '돋움'
+                 + struct.pack("<H", 24))       # font.size
     # 문자 런 2: "빨강취소"(4자)+1 — strike + color 빨강
     char_run2 = (struct.pack("<I", 5)
                  + struct.pack("<I", 0x0100 | 0x40000)
@@ -738,7 +789,7 @@ def make_ppt_rich() -> bytes:
     slwt_children += rec(3999, struct.pack("<I", 1))
     slwt_children += rec(4000, body_text.encode("utf-16le")) + style
     slwt = rec(4080, slwt_children, ver=0xF)
-    document = rec(1000, doc_atom + slwt, ver=0xF)
+    document = rec(1000, doc_atom + font_coll + slwt, ver=0xF)
     return build_cfb({"PowerPoint Document": document})
 
 
@@ -937,12 +988,30 @@ class TestDocFidelity:
         assert len(rich.tables) == 1
         tbl = rich.tables[0]
         assert len(tbl.rows) == 2 and len(tbl.columns) == 2
-        assert tbl.cell(0, 0).text.strip() == "A1"
+        # TC80 rgf: 0열은 세로 병합 (fVertRestart/fVertMerge) — 한 셀로 합쳐짐
+        assert tbl.cell(0, 0)._tc is tbl.cell(1, 0)._tc
+        assert tbl.cell(0, 0).text.strip().split() == ["A1", "A2"]
         assert tbl.cell(0, 1).text.strip() == "B1"
-        assert tbl.cell(1, 0).text.strip() == "A2"
         assert tbl.cell(1, 1).text.strip() == "B2"
         # 표 뒤 본문이 표에 빨려들지 않는다
         assert any(p.text == "끝문단" for p in rich.paragraphs)
+
+    def test_tdef_widths_borders_shading_valign(self, rich):
+        """sprmTDefTable(0xD608)/Shd(0xD609) — 열너비/BRC 테두리/셰이딩/vAlign."""
+        tbl = rich.tables[0]
+        xml = tbl._tbl.xml
+        # 경계 0/2880/5760 twips → 열너비 2880tw = 2in
+        assert abs(tbl.columns[0].width - 914400 * 2) < 20000
+        assert 'w:val="double"' in xml   # 행1 tc0 상변 (brcType 3)
+        assert 'w:val="nil"' in xml      # 행1 tc1 좌변 (brcType 0)
+        assert 'w:fill="FF0000"' in xml  # SHD80 ipat=1 icoFore=6 (빨강)
+        assert 'w:vAlign' in xml and 'w:val="center"' in xml
+
+    def test_paragraph_spacing_sprms(self, rich):
+        last = [p for p in rich.paragraphs if p.text == "끝문단"][0]
+        pf = last.paragraph_format
+        assert abs(pf.space_before.pt - 12.0) < 0.01   # 240 twips
+        assert abs(pf.line_spacing - 2.0) < 0.01       # LSPD 480 fMult
 
     def test_e2e_svg(self, tmp_path):
         svg = _render_svg_pages(tmp_path, "rich.doc", make_doc_rich())
@@ -981,10 +1050,22 @@ class TestXlsFidelity:
         assert cell.fill.patternType == "solid"
         assert (cell.fill.fgColor.rgb or "").endswith("FFCC00")
 
+    def test_cell_borders(self, rich_ws):
+        b = rich_ws["A1"].border
+        assert b.left.style == "thin"
+        assert b.right.style == "double"
+        assert b.top.style == "dashed"
+        assert b.bottom.style == "medium"
+        assert (b.left.color.rgb or "").endswith("FFCC00")
+
     def test_e2e_svg(self, tmp_path):
         svg = _render_svg_pages(tmp_path, "rich.xls", make_xls_rich())
         assert "스타일셀" in svg
-        assert "#FFCC00" in svg  # 채우기가 렌더에 도달
+        assert "#FFCC00" in svg          # 채우기가 렌더에 도달
+        assert "<line" in svg            # 변별 테두리
+        assert "stroke-dasharray" in svg  # dashed 상변
+        assert 'text-anchor="middle"' in svg  # 가운데 정렬
+        assert "line-through" in svg     # 취소선 폰트
 
 
 @pytest.fixture(scope="module")
@@ -1022,9 +1103,19 @@ class TestPptFidelity:
         paras = self._body_paras(rich_slide)
         assert paras[0].alignment == PP_ALIGN.CENTER
 
+    def test_font_name_from_collection(self, rich_slide):
+        paras = self._body_paras(rich_slide)
+        assert paras[0].runs[0].font.name == "돋움"
+
+    def test_bullet_char(self, rich_slide):
+        paras = self._body_paras(rich_slide)
+        xml = paras[0]._p.xml
+        assert "buChar" in xml and "•" in xml
+
     def test_e2e_svg(self, tmp_path):
         svg = _render_svg_pages(tmp_path, "rich.ppt", make_ppt_rich())
         assert "굵은줄" in svg and "빨강취소" in svg
+        assert "•" in svg  # 불릿이 렌더 접두로
 
 
 class TestXls:

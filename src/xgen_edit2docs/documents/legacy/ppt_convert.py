@@ -49,6 +49,7 @@ _RT_TEXT_HEADER_ATOM = 3999
 _RT_TEXT_CHARS_ATOM = 4000
 _RT_STYLE_TEXT_PROP_ATOM = 4001
 _RT_TEXT_BYTES_ATOM = 4008
+_RT_FONT_ENTITY_ATOM = 4023  # FontCollection(2005) 안 — 이름 64B UTF-16
 
 _TITLE_TYPES = {0, 5}  # title / center title
 
@@ -80,12 +81,15 @@ class _CharStyle:
     strike: Optional[bool] = None
     size_pt: Optional[float] = None
     color: Optional[str] = None  # RRGGBB
+    font_idx: Optional[int] = None  # FontCollection 색인
 
 
 @dataclass
 class _ParaStyle:
     indent: int = 0
     align: Optional[int] = None  # 0 left / 1 center / 2 right / 3 justify
+    bullet: Optional[bool] = None    # paraFlags fHasBullet (마스크 유효 시)
+    bullet_char: Optional[str] = None
 
 
 #: (mask, size) — 문자 props, POI characterTextPropTypes 순서.
@@ -150,7 +154,15 @@ def _parse_style_atom(payload: bytes, text_len: int
                     size = 2 + cnt * 4
                 if pos + size > n:
                     raise ValueError
-                if m == 0x800:
+                if m == 0xF:  # paraFlags — bit0 fHasBullet (마스크 유효)
+                    (pf,) = struct.unpack_from("<H", payload, pos)
+                    if mask & 0x1:
+                        st.bullet = bool(pf & 0x1)
+                elif m == 0x80:  # bullet.char (UTF-16 코드포인트)
+                    (bc,) = struct.unpack_from("<H", payload, pos)
+                    if 0x20 <= bc < 0xFFFE:
+                        st.bullet_char = chr(bc)
+                elif m == 0x800:
                     (st.align,) = struct.unpack_from("<H", payload, pos)
                 pos += size
             para_runs.append((run_len, st))
@@ -169,7 +181,10 @@ def _parse_style_atom(payload: bytes, text_len: int
                     continue
                 if pos + size > n:
                     raise ValueError
-                if m == 0xFFFF:
+                if m == 0x10000:
+                    (fi,) = struct.unpack_from("<H", payload, pos)
+                    st.font_idx = fi
+                elif m == 0xFFFF:
                     (flags,) = struct.unpack_from("<H", payload, pos)
                     # mask 비트가 선언된 플래그만 유효 (POI setValueWithMask)
                     if mask & 0x0001:
@@ -219,9 +234,11 @@ def _decode_bytes_atom(payload: bytes) -> str:
     return payload.decode("latin-1")
 
 
-def _collect_slides(data: bytes) -> tuple[List[_SlideText], tuple[int, int]]:
+def _collect_slides(data: bytes
+                    ) -> tuple[List[_SlideText], tuple[int, int], List[str]]:
     slide_size_mu = (9144, 6858)  # 10in × 7.5in 기본
     slides: List[_SlideText] = []
+    fonts: List[str] = []
 
     def walk(start: int, end: int, in_sltwt: bool) -> None:
         nonlocal slide_size_mu
@@ -231,6 +248,11 @@ def _collect_slides(data: bytes) -> tuple[List[_SlideText], tuple[int, int]]:
                 walk(p_start, p_start + p_len,
                      in_sltwt or rec_type == _RT_SLIDE_LIST_WITH_TEXT)
                 continue
+            if rec_type == _RT_FONT_ENTITY_ATOM and p_len >= 2:
+                raw = data[p_start:p_start + min(p_len, 64)]
+                name = raw.decode("utf-16le", errors="replace").split("\x00")[0]
+                if name:
+                    fonts.append(name)
             if rec_type == _RT_DOCUMENT_ATOM and p_len >= 8:
                 w, h = struct.unpack_from("<ii", data, p_start)
                 if 576 <= w <= 576 * 100 and 576 <= h <= 576 * 100:
@@ -259,7 +281,7 @@ def _collect_slides(data: bytes) -> tuple[List[_SlideText], tuple[int, int]]:
                         data[p_start:p_start + p_len], len(block.text))
 
     walk(0, len(data), False)
-    return slides, slide_size_mu
+    return slides, slide_size_mu, fonts
 
 
 # ── PPTX 조립 ──────────────────────────────────────────────────
@@ -308,7 +330,7 @@ def ppt_to_pptx(content: bytes) -> bytes:
     finally:
         ole.close()
 
-    slides, (w_mu, h_mu) = _collect_slides(data)
+    slides, (w_mu, h_mu), font_names = _collect_slides(data)
     if not slides:
         raise LegacyConvertError("ppt 에서 슬라이드 텍스트를 찾지 못했습니다")
 
@@ -324,6 +346,20 @@ def ppt_to_pptx(content: bytes) -> bytes:
     _ALIGN = {0: PP_ALIGN.LEFT, 1: PP_ALIGN.CENTER,
               2: PP_ALIGN.RIGHT, 3: PP_ALIGN.JUSTIFY}
 
+    from pptx.oxml.ns import qn as _qn
+
+    def set_bullet(para, pst: _ParaStyle) -> None:
+        """paraFlags fHasBullet → a:buChar / a:buNone (렌더 엔진이 접두로
+        그려 준다 — txbody_to_svg _resolve_bullet_prefix)."""
+        if pst.bullet is None:
+            return
+        p_pr = para._p.get_or_add_pPr()
+        if pst.bullet:
+            el = p_pr.makeelement(_qn("a:buChar"), {"char": pst.bullet_char or "•"})
+        else:
+            el = p_pr.makeelement(_qn("a:buNone"), {})
+        p_pr.append(el)
+
     def emit_block(tf, block: _TextBlock, default_pt: float,
                    default_bold: bool, first_para_used: bool) -> bool:
         """텍스트 블록 → 문단들(\\r 경계), 런 스타일/정렬/레벨 반영."""
@@ -337,6 +373,7 @@ def ppt_to_pptx(content: bytes) -> bytes:
                 para.alignment = _ALIGN[pst.align]
             if pst.indent:
                 para.level = min(pst.indent, 4)
+            set_bullet(para, pst)
             # 문자 런 경계 + 줄바꿈(0x0B) 지점으로 조각 낸다
             cuts = sorted({pos, pos + len(para_text)} | {
                 b for b in boundaries if pos < b < pos + len(para_text)} | {
@@ -363,6 +400,9 @@ def ppt_to_pptx(content: bytes) -> bytes:
                     run.font._rPr.set("strike", "sngStrike")
                 if st.color:
                     run.font.color.rgb = RGBColor.from_string(st.color)
+                if (st.font_idx is not None
+                        and 0 <= st.font_idx < len(font_names)):
+                    run.font.name = font_names[st.font_idx]
             pos += len(para_text) + 1  # + \r
         return first_para_used
 

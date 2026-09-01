@@ -90,10 +90,35 @@ class _Chp:
 
 
 @dataclass
+class _TapCell:
+    """TC80 (20B: rgf 2B + unused 2B + BRC80×4) + SHD80 셰이딩."""
+    width_tw: int = 0
+    first_merged: bool = False   # rgf 0x0001 — 가로 병합 시작
+    merged: bool = False         # rgf 0x0002 — 가로 병합 연속
+    vert_merge: bool = False     # rgf 0x0020 — 세로 병합 연속
+    vert_restart: bool = False   # rgf 0x0040 — 세로 병합 시작
+    valign: int = 0              # rgf bits7-8 — 0 top / 1 center / 2 bottom
+    #: side → (val, sz_eighth_pt, color) — BRC80 그대로.
+    borders: Optional[Dict[str, Tuple[str, int, str]]] = None
+    shd_color: Optional[str] = None
+
+
+@dataclass
+class _Tap:
+    """행 정의 (sprmTDefTable 0xD608 + sprmTDefTableShd 0xD609)."""
+    boundaries: List[int] = field(default_factory=list)  # (itcMac+1) twips
+    cells: List[_TapCell] = field(default_factory=list)
+
+
+@dataclass
 class _Pap:
     jc: int = 0
     in_table: bool = False
     ttp: bool = False
+    space_before_tw: int = 0
+    space_after_tw: int = 0
+    line_mult: Optional[float] = None
+    tap: Optional[_Tap] = None
 
 
 @dataclass
@@ -323,8 +348,62 @@ def _chp_of(grpprl: bytes, fonts: List[str]) -> _Chp:
     return chp
 
 
+#: BRC80 brcType → docx 테두리 val (0/255 = 없음)
+_BRC_VAL = {0: "nil", 255: "nil", 1: "single", 2: "single", 3: "double",
+            5: "single", 6: "dotted", 7: "dashed", 8: "dotDash",
+            9: "dotDotDash", 10: "triple"}
+
+
+def _parse_brc(operand: bytes, off: int) -> Tuple[str, int, str]:
+    """BRC80 4B: w1 = dpt(1/8pt, 0xFF) | brcType<<8, w2 = ico(0xFF)."""
+    w1, w2 = struct.unpack_from("<2H", operand, off)
+    dpt = w1 & 0xFF
+    brc_type = (w1 >> 8) & 0xFF
+    ico = w2 & 0xFF
+    val = _BRC_VAL.get(brc_type, "single")
+    color = _ICO_RGB.get(ico, "000000")
+    return val, max(2, min(dpt, 48)), color
+
+
+def _parse_tdef(operand: bytes) -> Optional[_Tap]:
+    """sprmTDefTable: itcMac(1B) + (itcMac+1)×INT16 경계(twips) +
+    itcMac×TC80(20B — 있을 때만)."""
+    if not operand:
+        return None
+    itc = operand[0]
+    if itc == 0 or itc > 63:
+        return None
+    need = 1 + (itc + 1) * 2
+    if len(operand) < need:
+        return None
+    tap = _Tap()
+    tap.boundaries = list(struct.unpack_from(f"<{itc + 1}h", operand, 1))
+    tc_start = need
+    for i in range(itc):
+        cell = _TapCell()
+        if i + 1 <= itc and len(tap.boundaries) > i + 1:
+            cell.width_tw = max(0, tap.boundaries[i + 1] - tap.boundaries[i])
+        off = tc_start + i * 20
+        if off + 20 <= len(operand):
+            (rgf,) = struct.unpack_from("<H", operand, off)
+            cell.first_merged = bool(rgf & 0x0001)
+            cell.merged = bool(rgf & 0x0002)
+            cell.vert_merge = bool(rgf & 0x0020)
+            cell.vert_restart = bool(rgf & 0x0040)
+            cell.valign = (rgf >> 7) & 0x3
+            cell.borders = {
+                "top": _parse_brc(operand, off + 4),
+                "left": _parse_brc(operand, off + 8),
+                "bottom": _parse_brc(operand, off + 12),
+                "right": _parse_brc(operand, off + 16),
+            }
+        tap.cells.append(cell)
+    return tap
+
+
 def _pap_of(grpprl: bytes) -> _Pap:
     pap = _Pap()
+    shd_raw: Optional[bytes] = None
     for opcode, operand in _iter_sprms(grpprl):
         op = opcode & 0x1FF
         if op in (0x03, 0x61) and operand:  # sprmPJc (97) / sprmPJc80 (2000+)
@@ -333,6 +412,34 @@ def _pap_of(grpprl: bytes) -> _Pap:
             pap.in_table = operand[0] != 0
         elif op == 0x17 and operand:
             pap.ttp = operand[0] != 0
+        elif op == 0x12 and len(operand) >= 4:  # sprmPDyaLine — LSPD
+            dya, f_mult = struct.unpack_from("<hh", operand, 0)
+            if f_mult and 60 <= dya <= 1200:
+                pap.line_mult = dya / 240.0
+        elif op == 0x13 and len(operand) >= 2:  # sprmPDyaBefore (twips)
+            (pap.space_before_tw,) = struct.unpack_from("<H", operand, 0)
+        elif op == 0x14 and len(operand) >= 2:  # sprmPDyaAfter
+            (pap.space_after_tw,) = struct.unpack_from("<H", operand, 0)
+        elif op == 0x08 and opcode == 0xD608:  # sprmTDefTable
+            tap = _parse_tdef(operand)
+            if tap is not None:
+                pap.tap = tap
+        elif op == 0x09 and opcode == 0xD609:  # sprmTDefTableShd
+            shd_raw = operand
+    if pap.tap is not None and shd_raw:
+        # SHD80 2B: icoFore bits0-4, icoBack bits5-9, ipat bits10-15
+        for i, cell in enumerate(pap.tap.cells):
+            off = i * 2
+            if off + 2 > len(shd_raw):
+                break
+            (shd,) = struct.unpack_from("<H", shd_raw, off)
+            ico_fore = shd & 0x1F
+            ico_back = (shd >> 5) & 0x1F
+            ipat = (shd >> 10) & 0x3F
+            if ipat == 1 and ico_fore:  # solid 전경색
+                cell.shd_color = _ICO_RGB.get(ico_fore)
+            elif ico_back:
+                cell.shd_color = _ICO_RGB.get(ico_back)
     return pap
 
 
@@ -490,6 +597,13 @@ def doc_to_docx(content: bytes) -> bytes:
     def emit_para(target, para: _DocPara) -> None:
         if para.pap.jc in _WD_JC and para.pap.jc != 0:
             target.alignment = _WD_JC[para.pap.jc]
+        pf = target.paragraph_format
+        if para.pap.line_mult is not None and abs(para.pap.line_mult - 1.0) > 0.01:
+            pf.line_spacing = para.pap.line_mult
+        if para.pap.space_before_tw > 0:
+            pf.space_before = Pt(min(para.pap.space_before_tw, 2880) / 20.0)
+        if para.pap.space_after_tw > 0:
+            pf.space_after = Pt(min(para.pap.space_after_tw, 2880) / 20.0)
         # 문자 서식 경계로 런을 쪼갠다 — 같은 _Chp 가 이어지면 한 런.
         run_chars: List[str] = []
         run_chp: Optional[_Chp] = None
@@ -562,6 +676,7 @@ def doc_to_docx(content: bytes) -> bytes:
             continue
         # ── 표 구간: fInTable 연속 문단 → 행(fTtp 경계)/셀(0x07 종결) ──
         rows: List[List[List[_DocPara]]] = []
+        row_taps: List[Optional[_Tap]] = []
         cur_row: List[List[_DocPara]] = []
         cur_cell: List[_DocPara] = []
         while i < n_paras and paras[i].pap.in_table:
@@ -572,6 +687,7 @@ def doc_to_docx(content: bytes) -> bytes:
                     cur_cell = []
                 if cur_row:
                     rows.append(cur_row)
+                    row_taps.append(tp.pap.tap)  # 행 정의는 행 끝 문단에 실린다
                     cur_row = []
             elif tp.terminator == "\x07":
                 cur_cell.append(tp)
@@ -584,6 +700,7 @@ def doc_to_docx(content: bytes) -> bytes:
             cur_row.append(cur_cell)
         if cur_row:
             rows.append(cur_row)
+            row_taps.append(None)
         if not rows:
             continue
         n_cols = max(len(r) for r in rows)
@@ -592,16 +709,122 @@ def doc_to_docx(content: bytes) -> bytes:
             tbl.style = "Table Grid"
         except Exception:  # noqa: BLE001
             pass
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+        from docx.shared import Emu
+
+        # 열 너비 — 첫 행 정의의 경계(twips) 차분
+        first_tap = next((t for t in row_taps if t is not None), None)
+        if first_tap is not None:
+            for j, column in enumerate(tbl.columns):
+                if j < len(first_tap.cells) and first_tap.cells[j].width_tw > 0:
+                    try:
+                        column.width = Emu(first_tap.cells[j].width_tw * 635)
+                    except Exception:  # noqa: BLE001
+                        pass
+
+        def set_borders(cell_obj, borders) -> None:
+            tc_pr = cell_obj._tc.get_or_add_tcPr()
+            tcb = tc_pr.find(qn("w:tcBorders"))
+            if tcb is None:
+                tcb = OxmlElement("w:tcBorders")
+                tc_pr.append(tcb)
+            for name, (val, sz, color) in borders.items():
+                el = tcb.find(qn(f"w:{name}"))
+                if el is None:
+                    el = OxmlElement(f"w:{name}")
+                    tcb.append(el)
+                el.set(qn("w:val"), val)
+                el.set(qn("w:sz"), str(sz))
+                el.set(qn("w:color"), color)
+
+        def set_shd(cell_obj, rgb: str) -> None:
+            tc_pr = cell_obj._tc.get_or_add_tcPr()
+            shd = OxmlElement("w:shd")
+            shd.set(qn("w:val"), "clear")
+            shd.set(qn("w:fill"), rgb)
+            tc_pr.append(shd)
+
+        def set_valign(cell_obj, v: int) -> None:
+            if v not in (1, 2):
+                return
+            tc_pr = cell_obj._tc.get_or_add_tcPr()
+            va = OxmlElement("w:vAlign")
+            va.set(qn("w:val"), "center" if v == 1 else "bottom")
+            tc_pr.append(va)
+
+        # TC80 rgf 기반 병합 — 가로(fFirstMerged+fMerged 연속),
+        # 세로(fVertRestart 앵커 + 아래 행 fVertMerge 연속, 같은 열 색인).
+        for r_i, tap in enumerate(row_taps[:len(rows)]):
+            if tap is None:
+                continue
+            c = 0
+            while c < min(len(tap.cells), n_cols):
+                if tap.cells[c].first_merged:
+                    end = c
+                    while (end + 1 < min(len(tap.cells), n_cols)
+                           and tap.cells[end + 1].merged):
+                        end += 1
+                    if end > c:
+                        try:
+                            tbl.cell(r_i, c).merge(tbl.cell(r_i, end))
+                        except Exception:  # noqa: BLE001
+                            pass
+                    c = end + 1
+                else:
+                    c += 1
+        for c in range(n_cols):
+            r_i = 0
+            while r_i < len(rows):
+                tap = row_taps[r_i] if r_i < len(row_taps) else None
+                if (tap is not None and c < len(tap.cells)
+                        and tap.cells[c].vert_restart):
+                    end = r_i
+                    while end + 1 < len(rows):
+                        nt = row_taps[end + 1] if end + 1 < len(row_taps) else None
+                        if (nt is not None and c < len(nt.cells)
+                                and nt.cells[c].vert_merge
+                                and not nt.cells[c].vert_restart):
+                            end += 1
+                        else:
+                            break
+                    if end > r_i:
+                        try:
+                            tbl.cell(r_i, c).merge(tbl.cell(end, c))
+                        except Exception:  # noqa: BLE001
+                            pass
+                    r_i = end + 1
+                else:
+                    r_i += 1
+
         for r_i, row in enumerate(rows):
+            tap = row_taps[r_i] if r_i < len(row_taps) else None
             for c_i, cell_paras in enumerate(row[:n_cols]):
-                cell = tbl.cell(r_i, c_i)
+                try:
+                    cell = tbl.cell(r_i, c_i)
+                except Exception:  # noqa: BLE001
+                    continue
+                if tap is not None and c_i < len(tap.cells):
+                    tc = tap.cells[c_i]
+                    # 병합 연속 셀은 앵커와 같은 _tc 를 공유한다 — 여기서
+                    # 스타일을 다시 쓰면 앵커의 테두리(예: 상변 이중선)를
+                    # 연속 행 값으로 덮어써 버린다.
+                    continuation = (tc.merged and not tc.first_merged) or (
+                        tc.vert_merge and not tc.vert_restart)
+                    if not continuation:
+                        if tc.borders:
+                            set_borders(cell, tc.borders)
+                        if tc.shd_color:
+                            set_shd(cell, tc.shd_color)
+                        set_valign(cell, tc.valign)
                 first = True
                 for cp_para in cell_paras:
-                    if first:
+                    if first and not cell.paragraphs[0].runs:
                         cell.paragraphs[0].text = ""
                         target = cell.paragraphs[0]
                         first = False
                     else:
+                        first = False
                         target = cell.add_paragraph()
                     emit_para(target, cp_para)
 

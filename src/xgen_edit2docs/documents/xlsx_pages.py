@@ -74,17 +74,72 @@ def _cell_fill_hex(cell) -> Optional[str]:
     return None
 
 
-def _cell_font(cell) -> tuple[bool, Optional[str], float]:
-    bold, color, size = False, None, _FONT_PX
+def _cell_font(cell) -> tuple[bool, Optional[str], float, bool, str]:
+    """(bold, color, size_px, italic, deco) — deco 는 text-decoration 값."""
+    bold, color, size, italic, deco = False, None, _FONT_PX, False, ""
     try:
         font = cell.font
         bold = bool(font.b)
+        italic = bool(font.i)
+        parts = []
+        if font.u:
+            parts.append("underline")
+        if font.strike:
+            parts.append("line-through")
+        deco = " ".join(parts)
         color = _argb_to_hex(getattr(font.color, "rgb", None) if font.color else None)
         if font.sz:
             size = float(font.sz) * 96 / 72
     except Exception:  # noqa: BLE001
         pass
-    return bold, color, size
+    return bold, color, size, italic, deco
+
+
+#: openpyxl border style → (선폭 px, dasharray | None). 없으면 기본 격자.
+_XL_BORDER = {
+    "thin": (0.9, None), "hair": (0.6, None), "medium": (1.6, None),
+    "thick": (2.4, None), "double": (2.2, None),
+    "dashed": (0.9, "5 3"), "mediumDashed": (1.6, "5 3"),
+    "dotted": (0.9, "2 2"), "dashDot": (0.9, "5 3 2 3"),
+    "mediumDashDot": (1.6, "5 3 2 3"), "dashDotDot": (0.9, "5 3 2 3 2 3"),
+    "mediumDashDotDot": (1.6, "5 3 2 3 2 3"), "slantDashDot": (1.6, "5 3"),
+}
+
+
+def _cell_border_lines(cell, x: float, y: float, w: float, h: float) -> str:
+    """선언된 변만 스타일대로 — 나머지는 호출부의 기본 격자가 담당."""
+    try:
+        border = cell.border
+    except Exception:  # noqa: BLE001
+        return ""
+    coords = {
+        "left": (x, y, x, y + h), "right": (x + w, y, x + w, y + h),
+        "top": (x, y, x + w, y), "bottom": (x, y + h, x + w, y + h),
+    }
+    out = []
+    for side, (x1, y1, x2, y2) in coords.items():
+        try:
+            sd = getattr(border, side)
+            style = sd.style if sd is not None else None
+        except Exception:  # noqa: BLE001
+            continue
+        if not style or style not in _XL_BORDER:
+            continue
+        width, dash = _XL_BORDER[style]
+        color = "#666666"
+        try:
+            rgb = getattr(sd.color, "rgb", None) if sd.color else None
+            hexed = _argb_to_hex(rgb)
+            if hexed:
+                color = hexed
+        except Exception:  # noqa: BLE001
+            pass
+        dash_attr = f' stroke-dasharray="{dash}"' if dash else ""
+        out.append(
+            f'<line x1="{_f(x1)}" y1="{_f(y1)}" x2="{_f(x2)}" y2="{_f(y2)}" '
+            f'stroke="{color}" stroke-width="{_f(width)}"{dash_attr}/>'
+        )
+    return "".join(out)
 
 
 def xlsx_to_page_svgs(content: bytes) -> list[str]:
@@ -257,7 +312,7 @@ def _render_band(
                     value = cached
             text = format_cell_value(value, cell.number_format)
             fill = _cell_fill_hex(cell)
-            bold, color, size = _cell_font(cell)
+            bold, color, size, italic, deco = _cell_font(cell)
 
             ref = f"{get_column_letter(col_i)}{row_i}"
             attrs = f' fill="{fill}"' if fill else ' fill="none"'
@@ -266,18 +321,32 @@ def _render_band(
                 f'<rect x="{_f(x)}" y="{_f(y)}" width="{_f(cw)}" height="{_f(ch)}"'
                 f'{attrs} stroke="#C9C9C9" stroke-width="0.6"/>'
             ]
+            cell_parts.append(_cell_border_lines(cell, x, y, cw, ch))
             if text:
                 is_num = isinstance(value, (int, float)) and not isinstance(value, bool)
                 max_chars = max(int((cw - _CELL_PAD * 2) / (size * 0.55)), 1)
                 shown = text if len(text) <= max_chars else text[: max(max_chars - 1, 1)] + "…"
-                tx = x + cw - _CELL_PAD if is_num else x + _CELL_PAD
-                anchor = "end" if is_num else "start"
+                # 셀 정렬 — 명시 정렬 > 타입 기본(숫자 우측/문자 좌측)
+                halign = None
+                try:
+                    halign = cell.alignment.horizontal
+                except Exception:  # noqa: BLE001
+                    pass
+                if halign in ("center", "centerContinuous"):
+                    tx, anchor = x + cw / 2, "middle"
+                elif halign == "right" or (halign is None and is_num):
+                    tx, anchor = x + cw - _CELL_PAD, "end"
+                else:
+                    tx, anchor = x + _CELL_PAD, "start"
                 weight = ' font-weight="bold"' if bold else ""
+                style_extra = ' font-style="italic"' if italic else ""
+                if deco:
+                    style_extra += f' text-decoration="{deco}"'
                 fill_attr = color or "#222222"
                 cell_parts.append(
                     f'<text x="{_f(tx)}" y="{_f(y + ch / 2 + size * 0.32)}" '
                     f'text-anchor="{anchor}" font-size="{_f(size)}" '
-                    f'fill="{fill_attr}"{weight} font-family="{_FONT_STACK}" '
+                    f'fill="{fill_attr}"{weight}{style_extra} font-family="{_FONT_STACK}" '
                     f'xml:space="preserve">{_esc(shown)}</text>'
                 )
             cell_parts.append("</g>")

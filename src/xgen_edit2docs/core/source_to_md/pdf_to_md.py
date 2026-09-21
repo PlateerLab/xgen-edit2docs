@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PDF to Markdown Converter
-Uses PyMuPDF to extract PDF text content and convert to Markdown format.
+Uses xgen-pdf (pdfium) to extract PDF text content and convert to Markdown format.
 Supports heading levels, bold, italic, and list detection.
 """
 
@@ -14,9 +14,9 @@ from pathlib import Path
 from collections import Counter
 
 try:
-    import fitz  # PyMuPDF
+    import xgen_pdf as fitz  # pdfium-based engine (xgen-pdf)
 except ImportError:
-    print("[ERROR] PyMuPDF not installed. Run: pip install PyMuPDF", file=sys.stderr)
+    print("[ERROR] xgen-pdf not installed. Run: pip install xgen-pdf", file=sys.stderr)
     sys.exit(1)
 
 FONT_BODY_SIZE = 12
@@ -356,7 +356,7 @@ def should_keep_image(
     """Filter out small, decorative, or duplicate images.
 
     Args:
-        block: Image block extracted from PyMuPDF.
+        block: Image block from ``page.get_text("dict")``.
         page_rect: Current page rectangle.
         seen_hashes: Optional set used to deduplicate image payloads.
 
@@ -618,7 +618,7 @@ def clean_text(text: str) -> str:
 def merge_adjacent_formatting(text: str) -> str:
     """Merge adjacent same-style formatted spans split across PDF tokens.
 
-    PyMuPDF often emits a phrase as several spans, so per-span wrapping in
+    The text engine may emit a phrase as several spans, so per-span wrapping in
     ``format_span_text`` produces ``**X****Y**`` (bold) or ``***X******Y***``
     (bold-italic) where one phrase is intended. Collapse the abutting markers
     so the run reads as a single phrase: ``**X Y**`` / ``***X Y***``.

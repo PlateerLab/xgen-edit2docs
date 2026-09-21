@@ -1,6 +1,6 @@
 [project]
 name = "xgen-edit2docs"
-version = "0.23.0"
+version = "0.24.0"
 description = "AI-agent-native document engine: generate and chat-edit DOCX, XLSX and PPTX as a Python library, agent tool set, MCP server or hosted service. English-first with first-class Korean support. Sister project of edit2ppt."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -31,17 +31,12 @@ dependencies = [
     # Core engine dependencies (from ppt-master)
     "python-pptx>=0.6.21",
     "python-docx>=1.1.0",
-    "PyMuPDF>=1.23.0",
+    # PDF engine: pdfium-based xgen-pdf (BSD/Apache). PyMuPDF (AGPL) is gone.
+    "xgen-pdf @ https://github.com/PlateerLab/xgen-pdf/releases/download/v0.1.1/xgen_pdf-0.1.1-py3-none-any.whl",
     "mammoth>=1.6.0",
     "openpyxl>=3.1.0",
-    # Lossless raw OOXML layer (xgen_contextifier.open_raw): surgical xlsx/docx
-    # edits and PPTX native-content preservation that keep charts,
-    # sparklines, custom XML, cached formula values and native
-    # charts/tables byte-identical through an edit.
-    # ⚠ 내부 패키지는 **URL 직접참조**로 고정한다. 우리 패키지는 어느 인덱스에도
-    # 없으므로 이름으로만 요구하면 `pip install -e .` 이 해석에 실패한다 —
-    # 실제로 이 저장소는 개발 설치조차 되지 않는 상태였다.
-    "xgen-contextifier @ https://github.com/PlateerLab/xgen-contextifier/releases/download/v0.9.0/xgen_contextifier-0.9.0-py3-none-any.whl",
+    # Lossless raw OOXML layer: vendored in xgen_edit2docs.raw (from xgen-contextifier 0.9.0),
+    # so no dependency on that package (which would pull in PyMuPDF).
     # Native chart export (data-pptx-native markers) generates the chart's
     # embedded XLSX workbook with XlsxWriter (upstream 53c6cad5).
     "XlsxWriter>=3.0",
@@ -49,6 +44,8 @@ dependencies = [
     "markdownify>=0.11.6",
     "ebooklib>=0.18",
     "beautifulsoup4>=4.12.0",
+    # HWP/OLE containers (was an indirect dependency via xgen-contextifier).
+    "olefile>=0.47",
     "requests>=2.31.0",
     "Pillow>=9.0.0",
     "numpy>=1.20.0",

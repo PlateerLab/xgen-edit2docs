@@ -51,7 +51,7 @@ class XmlEditResult:
 
 
 def _open_package(content: bytes):
-    from xgen_contextifier.raw.opc import OpcPackage
+    from xgen_edit2docs.raw.opc import OpcPackage
 
     return OpcPackage.open(content)
 

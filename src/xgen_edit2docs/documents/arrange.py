@@ -42,7 +42,7 @@ def apply_arrange(
     per op ``{op, target, to?, name?, status, message}``; ``warnings`` is
     a list of ``{code, message}`` (e.g. a rename that leaves formula
     references dangling)."""
-    from xgen_contextifier import open_raw
+    from xgen_edit2docs.raw import open_raw
 
     results: list[dict] = []
     warnings: list[dict] = []

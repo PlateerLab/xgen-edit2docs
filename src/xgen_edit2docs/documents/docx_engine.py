@@ -318,7 +318,7 @@ def _chart_outline(content: bytes) -> list[dict]:
     """Read-only chart summaries via xgen_contextifier (best-effort: outline
     must never fail because a chart part is exotic)."""
     try:
-        from xgen_contextifier import open_raw
+        from xgen_edit2docs.raw import open_raw
 
         raw = open_raw(content, extension="docx")
         return [
@@ -379,7 +379,7 @@ def apply_docx_edits(content: bytes, edits: Iterable[DocxEdit]) -> tuple[bytes, 
     Per-edit soft failures (like the PPTX text editor): ``old_text``
     guards replaces with a whitespace-normalized comparison.
     """
-    from xgen_contextifier import open_raw
+    from xgen_edit2docs.raw import open_raw
 
     try:
         raw = open_raw(content, extension="docx")
@@ -477,7 +477,7 @@ def _fragment_blocks(fragment: bytes) -> list:
     grafting this replaces)."""
     import zipfile
 
-    from xgen_contextifier.raw import qn
+    from xgen_edit2docs.raw import qn
     from lxml import etree
 
     with zipfile.ZipFile(io.BytesIO(fragment)) as zf:

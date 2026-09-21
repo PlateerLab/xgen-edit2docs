@@ -5,7 +5,7 @@ A deterministic page-layout engine over python-docx's XML model: reads
 line wrap (``xgen_edit2docs.render.fonts`` — the same fonts resvg
 rasterizes with), lays out tables/images/headers/footers, and emits
 one self-contained SVG per page. ``render_doc`` feeds these to the
-resvg/PyMuPDF raster layer for PNG/PDF — the piece LibreOffice used to
+resvg/xgen-pdf raster layer for PNG/PDF — the piece LibreOffice used to
 provide.
 
 Fidelity scope (deliberate): body paragraphs (runs with bold/italic/

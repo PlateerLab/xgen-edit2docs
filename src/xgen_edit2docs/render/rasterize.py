@@ -1,11 +1,11 @@
-"""SVG → PNG / PDF rasterization (resvg + PyMuPDF).
+"""SVG → PNG / PDF rasterization (resvg + xgen-pdf).
 
 Backend choice is deliberate (verified by spike, 2026-07-05):
 
 - ``resvg`` (via the self-contained ``resvg-py`` wheel) renders the
   SVG our converters emit — linear/radial gradients, clipPath,
   stroke-dasharray, CJK text — faithfully, with no system libraries.
-- PyMuPDF's built-in SVG parser was disqualified: it rasterizes
+- A PDF library's built-in SVG parser was disqualified: it rasterizes
   gradient/pattern fills as black boxes. It is still the right tool
   for the *assembly* step (PNG pages → one PDF), which is pure image
   placement.
@@ -100,7 +100,7 @@ def svgs_to_pdf(
     backend (cairosvg, system cairo) can slot in later behind the same
     signature — see docs/native-render-plan.md.
     """
-    import fitz  # PyMuPDF — core dependency
+    import xgen_pdf as fitz  # pdfium-based engine (xgen-pdf)
 
     if not svgs:
         raise ValueError("svgs_to_pdf needs at least one SVG page")

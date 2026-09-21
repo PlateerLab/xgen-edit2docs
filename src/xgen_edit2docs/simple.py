@@ -510,7 +510,7 @@ def render_doc(
     """Render a document to page images or a PDF — no LibreOffice.
 
     Native raster pipeline (docs/native-render-plan.md): per-page SVG →
-    resvg PNG → (for ``to="pdf"``) PyMuPDF assembly. Deterministic, no
+    resvg PNG → (for ``to="pdf"``) xgen-pdf assembly. Deterministic, no
     LLM, no subprocess.
 
     Args:

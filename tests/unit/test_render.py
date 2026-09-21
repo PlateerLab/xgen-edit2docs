@@ -81,7 +81,7 @@ class TestRasterize:
         assert not (out / "page-9.png").exists()  # shrunk docs drop old pages
 
     def test_svgs_to_pdf_page_count_and_size(self):
-        import fitz
+        import xgen_pdf as fitz
 
         pdf = svgs_to_pdf([GRADIENT_SVG, GRADIENT_SVG, GRADIENT_SVG], dpi=144)
         with fitz.open(stream=pdf, filetype="pdf") as doc:
@@ -106,7 +106,7 @@ class TestRenderDoc:
         assert result.paths[0].read_bytes().startswith(PNG_MAGIC)
 
     def test_pptx_to_pdf(self, deck_path, tmp_path):
-        import fitz
+        import xgen_pdf as fitz
 
         result = render_doc(deck_path, to="pdf", out_dir=tmp_path / "pdf")
         assert result.paths[0].name == "deck.pdf"

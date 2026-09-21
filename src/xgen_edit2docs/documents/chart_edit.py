@@ -73,7 +73,7 @@ def list_charts(content: bytes, fmt: str) -> list[dict]:
     the address source for :func:`apply_chart_edits`.
     """
     try:
-        from xgen_contextifier import open_raw
+        from xgen_edit2docs.raw import open_raw
 
         raw = open_raw(content, extension=fmt)
         out: list[dict] = []
@@ -110,8 +110,8 @@ def apply_chart_edits(
     deterministic editors. The package is only re-serialized when at least
     one edit applied; untouched parts stay byte-identical.
     """
-    from xgen_contextifier import open_raw
-    from xgen_contextifier.raw.opc import RawUnsupportedError
+    from xgen_edit2docs.raw import open_raw
+    from xgen_edit2docs.raw.opc import RawUnsupportedError
 
     raw = open_raw(content, extension=fmt)
     charts = _charts_of(raw, fmt)

@@ -187,7 +187,7 @@ def _chart_outline(content: bytes) -> list[dict]:
     """Read-only chart summaries via xgen_contextifier (best-effort: outline
     must never fail because a chart part is exotic)."""
     try:
-        from xgen_contextifier import open_raw
+        from xgen_edit2docs.raw import open_raw
 
         raw = open_raw(content, extension="xlsx")
         return [
@@ -266,7 +266,7 @@ def apply_xlsx_edits(content: bytes, edits: Iterable[XlsxEdit]) -> tuple[bytes, 
     formula values all survive byte-identical (the old openpyxl
     load→save round-trip destroyed every one of those on EVERY edit).
     """
-    from xgen_contextifier import open_raw
+    from xgen_edit2docs.raw import open_raw
 
     try:
         raw = open_raw(content, extension="xlsx")
@@ -369,7 +369,7 @@ def _add_raw_sheet(raw, title: str) -> None:
     rels entry, and the ``<sheet>`` element in ``xl/workbook.xml``.
     Everything else in the package stays byte-identical.
     """
-    from xgen_contextifier.raw import qn
+    from xgen_edit2docs.raw import qn
 
     package = raw.package
     n = 1

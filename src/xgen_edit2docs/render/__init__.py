@@ -8,7 +8,7 @@ deliverables:
 - :func:`svg_to_png` / :func:`svgs_to_pngs` — resvg (self-contained
   Rust rasterizer wheel; gradients/clipPath/CJK verified) at a chosen
   DPI.
-- :func:`svgs_to_pdf` — raster pages assembled into a PDF by PyMuPDF
+- :func:`svgs_to_pdf` — raster pages assembled into a PDF by xgen-pdf
   (already a core dependency).
 - :class:`FontResolver` — system-font discovery + fontTools metrics so
   layout code can measure real advance widths instead of the fixed

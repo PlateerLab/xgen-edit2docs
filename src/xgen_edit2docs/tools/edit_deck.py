@@ -449,7 +449,7 @@ def _native_inventory(pptx: bytes) -> list[_SlideNatives]:
     planner simply loses the annotation, never the turn.
     """
     try:
-        from xgen_contextifier import open_raw
+        from xgen_edit2docs.raw import open_raw
     except Exception:  # pragma: no cover - xgen_contextifier is a hard dep
         return []
     try:

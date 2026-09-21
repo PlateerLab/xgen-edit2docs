@@ -76,5 +76,5 @@ Important optional packages:
 - `edge-tts` for `notes_to_audio.py` recorded narration audio
 - `Pillow` for image utilities
 - `numpy` for watermark removal
-- `PyMuPDF` for PDF conversion
+- `xgen-pdf` for PDF conversion
 - `google-genai` / `openai` for image generation backends

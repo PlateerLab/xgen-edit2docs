@@ -9,6 +9,8 @@
 
     hwpx_convert  OWPML(zip+XML) — Contents/header.xml 의 charPr/paraPr 를
                   해석해 런 스타일까지 살린다. BinData 이미지 포함.
+    hwp_html      HWP 5.0 → 자립형 HTML 한 장 (hwp_convert 의 해석을 그대로,
+                  DOCX 를 거치지 않는다) — 문서 출처 보기처럼 HTML 이 필요한 곳용.
     hwp_convert   HWP 5.0 바이너리 — OLE 복합문서 + zlib 레코드 스트림.
                   레코드 헤더(tagid/level/size), DocInfo 의 CHAR_SHAPE,
                   BodyText 의 PARA_TEXT/PARA_CHAR_SHAPE/TABLE/PAGE_DEF.

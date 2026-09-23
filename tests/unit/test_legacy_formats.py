@@ -312,7 +312,7 @@ def make_hwp_rich() -> bytes:
         _rec(0x14, 0, border_fill(0x00CCFF, left_stroke=2)),  # id 2 — 배경 + 좌변 대시
         _rec(0x14, 0, border_fill(None, stroke=0)),           # id 3 — 테두리 없음
         _rec(0x15, 0, char_shape(10.0, 0x0, 0x000000)),        # 0 보통
-        _rec(0x15, 0, char_shape(12.0, 0x2 << 2, 0x0000FF)),   # 1 취소선+빨강
+        _rec(0x15, 0, char_shape(12.0, 0x1 << 18, 0x0000FF)),  # 1 취소선(표 35 bits18-20)+빨강
         _rec(0x15, 0, char_shape(14.0, 0x2, 0x000000)),        # 2 굵게
         _rec(0x19, 0, para_shape(1)),           # parashape 0: left
         _rec(0x19, 0, para_shape(3, ls=200)),   # parashape 1: center + 줄간격 200%

@@ -33,7 +33,10 @@ HWP 5.0 은 OLE 복합문서다 (레퍼런스: 한컴 공개 스펙 —
 - 머리말/꼬리말: 첫 정의를 docx 섹션 header/footer 텍스트로
 - 페이지: PAGE_DEF 크기/여백
 
-수식·도형 좌표·각주는 범위 밖. 암호/배포용 문서는 명시 거부.
+수식·도형 좌표는 범위 밖. 암호·DRM·인증서 암호화 문서는 명시 거부하고,
+배포용 문서는 공개 스펙(배포용 문서 revision 1.2)대로 풀어 읽는다.
+
+본 제품은 한글과컴퓨터의 글 문서 파일(.hwp) 공개 문서를 참고하여 개발하였습니다.
 """
 
 from __future__ import annotations
@@ -75,6 +78,12 @@ _CTRL_SIZES = {
 }
 _CTRL_RE = re.compile(rb"[\x00-\x1f]\x00")
 
+#: 확장형 컨트롤 — 문단의 CTRL_HEADER 레코드와 하나씩 짝지어진다 (스펙 표 6).
+#: 텍스트 안 8워드 중 워드 1~2 가 그 레코드의 ctrl id 와 같은 4바이트다.
+_EXT_CTRLS = frozenset({1, 2, 3, 11, 12, 14, 15, 16, 17, 18, 21, 22, 23})
+#: 글자로 옮기는 문자형 컨트롤 — 하이픈, 묶음 빈칸, 고정폭 빈칸 (스펙 표 6).
+_CHAR_CTRLS = {0x18: "-", 0x1E: " ", 0x1F: " "}
+
 _HWPUNIT_PER_INCH = 7200.0
 _EMU_PER_INCH = 914400.0
 
@@ -97,6 +106,9 @@ class _CharShape:
     italic: bool = False
     underline: bool = False
     strike: bool = False
+    overline: bool = False
+    superscript: bool = False
+    subscript: bool = False
     color: Optional[str] = None  # RRGGBB
     face_id: Optional[int] = None  # 한글(ko) FaceName 참조
 
@@ -123,6 +135,13 @@ class _ParaProps:
     line_spacing: Optional[float] = None  # 배수 (RATIO 형만)
     space_before_pt: float = 0.0
     space_after_pt: float = 0.0
+    left_pt: float = 0.0
+    right_pt: float = 0.0
+    #: 첫 줄 들여쓰기(+) / 내어쓰기(-). 내어쓰기는 첫 줄이 왼쪽 여백에 서고
+    #: 나머지 줄이 그만큼 들어간다.
+    indent_pt: float = 0.0
+    #: 한글 줄 나눔 단위 (표 44 bit 7) — False 어절(기본), True 글자.
+    korean_by_char: bool = False
 
 
 @dataclass
@@ -132,8 +151,9 @@ class _DocInfo:
     border_fills: List[_BorderFill] = field(default_factory=list)
     #: 한글(ko) 글꼴 이름 목록 — CHAR_SHAPE face_id 가 가리킨다.
     ko_faces: List[str] = field(default_factory=list)
-    #: BIN_DATA 레코드 순서(1-based id) → (storage_id, ext). 링크형은 None.
-    bin_data: List[Optional[Tuple[int, str]]] = field(default_factory=list)
+    #: BIN_DATA 레코드 순서(1-based id) → (storage_id, ext, 압축 여부).
+    #: 압축 여부 None 은 문서 기본을 따른다. 링크형은 None.
+    bin_data: List[Optional[Tuple[int, str, Optional[bool]]]] = field(default_factory=list)
 
 
 def _read_bstr(payload: bytes, off: int) -> Tuple[str, int]:
@@ -149,8 +169,11 @@ def _read_bstr(payload: bytes, off: int) -> Tuple[str, int]:
 
 def _parse_char_shape(payload: bytes) -> _CharShape:
     """표 28/30 레이아웃: FontFace 7×WORD(14) + 폭/자간/상대크기/위치
-    7×BYTE ×4(28) = 42, INT32 basesize(pt×100), UINT32 flags(bit0 italic,
-    bit1 bold, bit2-3 밑줄 종류 — 1 밑줄/2 취소선/3 윗줄), COLORREF @52."""
+    7×BYTE ×4(28) = 42, INT32 basesize(pt×100), UINT32 flags, COLORREF @52.
+
+    flags (스펙 revision 1.3 표 35): bit0 기울임, bit1 진하게, bits2-3 밑줄
+    종류(0 없음/1 글자 아래/3 글자 위), bit15 위 첨자, bit16 아래 첨자,
+    bits18-20 취소선."""
     st = _CharShape()
     if len(payload) >= 2:
         (st.face_id,) = struct.unpack_from("<H", payload, 0)
@@ -164,7 +187,10 @@ def _parse_char_shape(payload: bytes) -> _CharShape:
         st.bold = bool(flags & 0x2)
         kind = (flags >> 2) & 0x3
         st.underline = kind == 1
-        st.strike = kind == 2
+        st.overline = kind == 3
+        st.superscript = bool(flags & (1 << 15))
+        st.subscript = bool(flags & (1 << 16)) and not st.superscript
+        st.strike = bool((flags >> 18) & 0x7)
     if len(payload) >= 56:
         (colorref,) = struct.unpack_from("<I", payload, 52)
         r, g, b = colorref & 0xFF, (colorref >> 8) & 0xFF, (colorref >> 16) & 0xFF
@@ -173,18 +199,35 @@ def _parse_char_shape(payload: bytes) -> _CharShape:
     return st
 
 
-#: 표 39 문단 모양 속성1 align (bits 2-4) → docx 정렬.
+#: 표 39 문단 모양 속성1 align (bits 2-4) → 정렬. 4 배분, 5 나눔(공백만 배분).
 _ALIGN_MAP = {0: "justify", 1: "left", 2: "right", 3: "center",
-              4: "justify", 5: "justify"}
+              4: "distribute", 5: "justify"}
+
+
+#: 문단 여백 한계 — 이형 값이 문단을 화면 밖으로 밀지 않게 (±8in).
+_PARA_MARGIN_MAX = 7200 * 2 * 8
 
 
 def _parse_para_shape(payload: bytes) -> _ParaProps:
     """표 38: flags(4) margins×4(doubled, 1/7200in ×2) @4..20,
-    linespacing @24 (flags bits0-1: 0=RATIO %, 1=FIXED …)."""
+    linespacing @24 (flags bits0-1: 0=RATIO %, 1=FIXED …).
+
+    margins = 왼쪽 @4, 오른쪽 @8, 들여쓰기/내어쓰기 @12, 문단 위 @16, 아래 @20
+    (스펙 revision 1.3 표 43 문단 모양).
+    """
     pp = _ParaProps()
+    if len(payload) >= 16:
+        left2, right2, indent2 = struct.unpack_from("<3i", payload, 4)
+        if 0 < left2 <= _PARA_MARGIN_MAX:
+            pp.left_pt = left2 / 200.0
+        if 0 < right2 <= _PARA_MARGIN_MAX:
+            pp.right_pt = right2 / 200.0
+        if abs(indent2) <= _PARA_MARGIN_MAX:
+            pp.indent_pt = indent2 / 200.0
     if len(payload) >= 4:
         (flags,) = struct.unpack_from("<I", payload, 0)
         pp.align = _ALIGN_MAP.get((flags >> 2) & 0x7, "left")
+        pp.korean_by_char = bool(flags & 0x80)
         if len(payload) >= 28:
             top2, bottom2, ls = struct.unpack_from("<3i", payload, 16)
             # doubled margin: 1/7200 inch × 2 → pt = v/2 × 72/7200 = v/200
@@ -230,9 +273,13 @@ def _parse_border_fill(payload: bytes) -> _BorderFill:
     return bf
 
 
-def _parse_bin_data(payload: bytes) -> Optional[Tuple[int, str]]:
+def _parse_bin_data(payload: bytes) -> Optional[Tuple[int, str, Optional[bool]]]:
     """표 12: flags UINT16 — EMBEDDING(1)/STORAGE(2)면 storage_id UINT16 +
-    (EMBEDDING 은) ext BSTR. 링크형(0)은 외부 파일이라 None."""
+    (EMBEDDING 은) ext BSTR. 링크형(0)은 외부 파일이라 None.
+
+    flags bits 4-5 는 압축(스펙 revision 1.3 표 18): 0 문서 기본, 0x10 압축,
+    0x20 압축하지 않음 — 한글은 이미 압축된 png/jpg 를 날것으로 둔다.
+    """
     if len(payload) < 4:
         return None
     (flags,) = struct.unpack_from("<H", payload, 0)
@@ -243,7 +290,13 @@ def _parse_bin_data(payload: bytes) -> Optional[Tuple[int, str]]:
     ext = ""
     if storage_type == 1:
         ext, _ = _read_bstr(payload, 4)
-    return storage_id, ext.lower().lstrip(".")
+    mode = (flags >> 4) & 0x3
+    compressed = None if mode == 0 else mode == 1
+    return storage_id, ext.lower().lstrip("."), compressed
+
+
+#: 날것 이미지 시그니처 — 압축 표시와 실제가 어긋난 스트림을 알아본다.
+_IMAGE_MAGIC = (b"\x89PNG", b"\xff\xd8\xff", b"GIF8", b"BM", b"II*\x00", b"MM\x00*")
 
 
 def _parse_doc_info(data: bytes) -> _DocInfo:
@@ -285,11 +338,25 @@ def _parse_doc_info(data: bytes) -> _DocInfo:
 class _Para:
     """레코드에서 복원한 문단."""
     text: str = ""
-    #: (문자 위치, charshape id) — PARA_CHAR_SHAPE 그대로.
+    #: (원문 워드 위치, charshape id) — PARA_CHAR_SHAPE 그대로.
     shape_spans: List[tuple] = field(default_factory=list)
     parashape_id: Optional[int] = None
     #: 이 문단에 앵커된 블록(표/그림/글상자 문단들) — 등장 순서.
     attachments: List[object] = field(default_factory=list)
+    #: 원문 워드 위치 → ``text`` 위치. 컨트롤 문자(확장형 8워드)는 텍스트에
+    #: 없으므로 PARA_CHAR_SHAPE 위치를 그대로 쓰면 컨트롤 뒤 글자 모양이 밀린다.
+    raw_map: List[int] = field(default_factory=list)
+
+    def text_pos(self, raw: int) -> int:
+        """원문 워드 위치 ``raw`` 가 가리키는 ``text`` 위치.
+
+        위치 표가 없으면(빈 문단·이형) 원문 위치를 그대로 쓴다.
+        """
+        if not self.raw_map:
+            return min(max(raw, 0), len(self.text))
+        if raw < 0:
+            return 0
+        return self.raw_map[raw] if raw < len(self.raw_map) else len(self.text)
 
 
 @dataclass
@@ -314,6 +381,13 @@ class _Table:
     cols: int = 0
     cells: List[_Cell] = field(default_factory=list)
     caption: List[_Para] = field(default_factory=list)
+    #: 캡션 방향 (표 73 bits0-1) — left/right/top/bottom
+    caption_side: str = "bottom"
+    #: 표 자체의 테두리/배경 (표 74 Border Fill ID, 1-based) — 0 이면 없음.
+    borderfill_id: int = 0
+    #: 글자처럼 취급(표 70 bit0) — 줄 안의 ``pos`` 자리에 놓인다.
+    inline: bool = False
+    pos: int = -1
 
 
 @dataclass
@@ -321,11 +395,25 @@ class _Image:
     bindata_id: int = 0
     width_hu: int = 0
     height_hu: int = 0
+    inline: bool = False
+    pos: int = -1
 
 
 @dataclass
 class _TextBox:
     paras: List[_Para] = field(default_factory=list)
+    inline: bool = False
+    pos: int = -1
+
+
+@dataclass
+class _Note:
+    """각주('fn  ')/미주('en  ') — 본문 ``pos`` 자리에 참조 표시, 내용은 문단 목록."""
+    kind: str = "fn"
+    paras: List[_Para] = field(default_factory=list)
+    #: 내용 첫 자동 번호(각주/미주 번호) — 참조 표시에 쓴다. 없으면 None.
+    number: Optional[str] = None
+    pos: int = -1
 
 
 @dataclass
@@ -384,44 +472,233 @@ def _build_tree(data: bytes) -> List[_Node]:
     return roots
 
 
-def _decompress(raw: bytes) -> bytes:
+#: 스트림 하나의 압축 해제 상한. 압축 폭탄(작은 파일 → 수 GB)이 서버 메모리를
+#: 통째로 먹지 않게 한다 — 실문서 본문·그림 스트림은 이보다 훨씬 작다.
+_MAX_STREAM_BYTES = 256 * 1024 * 1024
+
+
+def _decompress(raw: bytes, limit: int = _MAX_STREAM_BYTES) -> bytes:
     """HWP 압축 스트림 = raw deflate. 뒤에 패딩이 붙어 있어도 관용한다."""
     d = zlib.decompressobj(-15)
-    out = d.decompress(raw)
-    out += d.flush()
+    try:
+        out = d.decompress(raw, limit)
+        if d.unconsumed_tail:
+            raise LegacyConvertError("hwp 스트림이 너무 큽니다 (압축 해제 상한 초과)")
+        out += d.flush()
+    except zlib.error as exc:
+        raise LegacyConvertError(f"hwp 압축 스트림이 깨졌습니다: {exc}") from exc
+    if len(out) > limit:
+        raise LegacyConvertError("hwp 스트림이 너무 큽니다 (압축 해제 상한 초과)")
     return out
+
+
+def _parse_text(payload: bytes, ctrl_ids: Optional[List[bytes]] = None,
+                inserts: Optional[Dict[int, str]] = None,
+                ) -> Tuple[str, List[int], Dict[int, int]]:
+    """PARA_TEXT → (본문 텍스트, 원문 워드 위치 → 텍스트 위치 표, 컨트롤 자리).
+
+    탭/줄바꿈/하이픈/묶음·고정폭 빈칸은 글자로, 나머지 컨트롤 워드는 건너뛴다.
+    표의 i 번째 값은 원문 i 번째 워드가 텍스트에서 놓이는 위치다 — 컨트롤
+    워드는 그 자리(다음 글자 위치)를, 서로게이트 쌍은 두 워드가 같은 글자를
+    가리킨다.
+
+    ``ctrl_ids`` 는 문단의 CTRL_HEADER 들의 ctrl id(앞 4바이트)를 순서대로
+    준다. 텍스트 안 확장 컨트롤을 같은 id 의 다음 레코드와 짝지어 ``{레코드
+    순번: 텍스트 위치}`` 를 돌려주고, ``inserts[순번]`` 글자(자동 번호·덧말
+    본문 등)를 그 자리에 끼운다.
+    """
+    parts: List[str] = []
+    pos_map: List[int] = []
+    ctrl_pos: Dict[int, int] = {}
+    next_ctrl = 0
+    tlen = 0
+    idx, n = 0, len(payload)
+    n -= n & 1  # 홀수 꼬리 바이트는 글자가 아니다
+    while idx < n:
+        m = _CTRL_RE.search(payload, idx, n)
+        # 홀수 오프셋 매치는 UTF-16 상위바이트 우연 — 다음 짝수로.
+        while m is not None and (m.start() & 1):
+            m = _CTRL_RE.search(payload, m.start() + 1, n)
+        ctrl = m.start() if m is not None else n
+        if idx < ctrl:
+            chunk = payload[idx:ctrl]
+            text = chunk.decode("utf-16le", errors="replace")
+            parts.append(text)
+            words = struct.unpack_from(f"<{len(chunk) // 2}H", chunk)
+            k = 0
+            while k < len(words):
+                w = words[k]
+                if 0xD800 <= w <= 0xDBFF and k + 1 < len(words) \
+                        and 0xDC00 <= words[k + 1] <= 0xDFFF:
+                    pos_map += (tlen, tlen)
+                    k += 2
+                else:
+                    pos_map.append(tlen)
+                    k += 1
+                tlen += 1
+        if m is None:
+            break
+        code = payload[ctrl]
+        words_n = _CTRL_SIZES.get(code, 1)
+        end = min(ctrl + words_n * 2, n)
+        pos_map.extend([tlen] * ((end - ctrl) // 2))
+        if code == 0x09:
+            parts.append("\t")
+            tlen += 1
+        elif code == 0x0A:
+            parts.append("\n")
+            tlen += 1
+        elif code in _CHAR_CTRLS:
+            parts.append(_CHAR_CTRLS[code])
+            tlen += 1
+        elif code in _EXT_CTRLS and ctrl_ids and ctrl + 6 <= n:
+            cid = payload[ctrl + 2:ctrl + 6]
+            for k in range(next_ctrl, len(ctrl_ids)):
+                if ctrl_ids[k] == cid:
+                    ctrl_pos[k] = tlen
+                    next_ctrl = k + 1
+                    extra = (inserts or {}).get(k)
+                    if extra:
+                        parts.append(extra)
+                        tlen += len(extra)
+                    break
+        idx = end
+    text = "".join(parts)
+    if len(text) != tlen:  # 디코더와 워드 셈이 어긋나는 이형 — 위치 표를 버린다
+        return text, [], {}
+    return text, pos_map, ctrl_pos
 
 
 def _parse_text_chunks(payload: bytes) -> str:
     """PARA_TEXT → 본문 텍스트. 탭/줄바꿈은 보존, 컨트롤 워드는 건너뛴다."""
-    parts: List[str] = []
-    idx, n = 0, len(payload)
-    while idx < n:
-        m = _CTRL_RE.search(payload, idx)
-        # 홀수 오프셋 매치는 UTF-16 상위바이트 우연 — 다음 짝수로.
-        while m is not None and (m.start() & 1):
-            m = _CTRL_RE.search(payload, m.start() + 1)
-        ctrl = m.start() if m is not None else n
-        if idx < ctrl:
-            parts.append(payload[idx:ctrl].decode("utf-16le", errors="replace"))
-        if m is None:
-            break
-        code = payload[ctrl]
-        words = _CTRL_SIZES.get(code, 1)
-        if code == 0x09:
-            parts.append("\t")
-        elif code == 0x0A:
-            parts.append("\n")
-        idx = ctrl + words * 2
-    return "".join(parts)
+    return _parse_text(payload)[0]
+
+
+# ── 자동 번호 · 덧말 · 글자 겹침 ─────────────────────────────────
+
+_CIRCLED_DIGITS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
+_HANGUL_SYLLABLES = "가나다라마바사아자차카타파하"
+_HANGUL_JAMO = "ㄱㄴㄷㄹㅁㅂㅅㅇㅈㅊㅋㅌㅍㅎ"
+_CIRCLED_SYLLABLES = "㉮㉯㉰㉱㉲㉳㉴㉵㉶㉷㉸㉹㉺㉻"
+_CIRCLED_JAMO = "㉠㉡㉢㉣㉤㉥㉦㉧㉨㉩㉪㉫㉬㉭"
+_HANJA_DIGITS = "一二三四五六七八九十"
+_HANGUL_DIGITS = "일이삼사오육칠팔구십"
+_CIRCLED_HANJA = "㊀㊁㊂㊃㊄㊅㊆㊇㊈㊉"
+_GAPEUL = "갑을병정무기경신임계"
+_GAPEUL_HANJA = "甲乙丙丁戊己庚辛壬癸"
+
+
+def _roman(n: int) -> str:
+    out = []
+    for value, sym in ((1000, "M"), (900, "CM"), (500, "D"), (400, "CD"), (100, "C"),
+                       (90, "XC"), (50, "L"), (40, "XL"), (10, "X"), (9, "IX"),
+                       (5, "V"), (4, "IV"), (1, "I")):
+        while n >= value:
+            out.append(sym)
+            n -= value
+    return "".join(out)
+
+
+def _format_number(n: int, shape: int) -> str:
+    """스펙 표 134 번호 모양 — 표에 없는 범위는 아라비아 숫자."""
+    def cyc(seq: str) -> str:
+        return seq[(n - 1) % len(seq)] if n >= 1 else str(n)
+
+    if shape == 1 and 1 <= n <= len(_CIRCLED_DIGITS):
+        return _CIRCLED_DIGITS[n - 1]
+    if shape in (2, 3) and 1 <= n <= 3999:
+        r = _roman(n)
+        return r if shape == 2 else r.lower()
+    if shape in (4, 5, 6, 7) and n >= 1:
+        letter = chr(ord("A") + (n - 1) % 26)
+        if shape == 4:
+            return letter
+        if shape == 5:
+            return letter.lower()
+        return chr((0x24B6 if shape == 6 else 0x24D0) + (n - 1) % 26)
+    table = {8: _HANGUL_SYLLABLES, 9: _CIRCLED_SYLLABLES, 10: _HANGUL_JAMO,
+             11: _CIRCLED_JAMO, 12: _HANGUL_DIGITS, 13: _HANJA_DIGITS,
+             14: _CIRCLED_HANJA, 15: _GAPEUL, 16: _GAPEUL_HANJA}
+    if shape in table:
+        return cyc(table[shape])
+    return str(n)
+
+
+def _atno(payload: bytes) -> Optional[Tuple[int, str]]:
+    """자동 번호(표 142): ctrl id + 속성 UINT32 + 번호 UINT16 + 사용자 기호 +
+    앞 장식 + 뒤 장식(WCHAR). → (번호 종류, 표시 글자). 쪽 번호는 쪽마다
+    다르므로 글자를 만들지 않는다."""
+    if len(payload) < 10:
+        return None
+    attr, number = struct.unpack_from("<IH", payload, 4)
+    kind = attr & 0xF
+    if kind == 0:
+        return kind, ""
+    text = _format_number(number, (attr >> 4) & 0xFF)
+    if len(payload) >= 16:
+        pre, post = struct.unpack_from("<2H", payload, 12)
+        if 0x20 <= pre < 0xD800:
+            text = chr(pre) + text
+        if 0x20 <= post < 0xD800:
+            text = text + chr(post)
+    return kind, text
+
+
+def _ctrl_text(payload: bytes) -> str:
+    """본문 자리에 글자로 들어가는 확장 컨트롤의 글자 — 자동 번호, 덧말
+    본문(표 151), 글자 겹침(표 150). 그 외는 빈 문자열."""
+    chid = _chid_of(payload)
+    if chid == "atno":
+        got = _atno(payload)
+        return got[1] if got else ""
+    if chid in ("tdut", "tcps"):
+        text, _ = _read_bstr(payload, 4)
+        return text.replace("\x00", "")
+    return ""
+
+
+def _obj_inline(payload: bytes) -> bool:
+    """개체 공통 속성(표 69/70) bit 0 — 글자처럼 취급."""
+    if len(payload) < 8:
+        return False
+    (attr,) = struct.unpack_from("<I", payload, 4)
+    return bool(attr & 0x1)
+
+
+def _para_runs(para: _Para) -> List[Tuple[str, int]]:
+    """문단 텍스트를 글자 모양 구간으로 자른다 — [(조각, charshape id)].
+
+    PARA_CHAR_SHAPE 의 위치는 **원문 워드 위치**(컨트롤 문자 포함)다. 구역·단
+    정의나 하이퍼링크 같은 확장 컨트롤(8워드)이 앞에 있으면 텍스트 위치와
+    어긋나므로 ``raw_map`` 으로 옮겨서 자른다. 첫 구간은 0 부터 — 어떤 글자도
+    버리지 않는다. 모양 정보가 없으면 id -1 하나.
+    """
+    text = para.text
+    if not text:
+        return []
+    spans = sorted(para.shape_spans) or [(0, -1)]
+    cuts = [(para.text_pos(pos), sid) for pos, sid in spans]
+    runs: List[Tuple[str, int]] = []
+    for i, (start, sid) in enumerate(cuts):
+        start = 0 if i == 0 else start
+        end = cuts[i + 1][0] if i + 1 < len(cuts) else len(text)
+        if end > start:
+            runs.append((text[start:end], sid))
+    return runs
 
 
 def _parse_page_def(payload: bytes) -> _PageDef:
+    """표 131 용지 설정 — 가로/세로 크기·여백 6개 … 속성 UINT32 @36.
+
+    속성 bit 0 이 1(넓게)이면 저장된 가로/세로를 바꿔 쓴다 (표 132).
+    """
     pd = _PageDef()
     if len(payload) >= 24:
         w, h, left, right, top, bottom = struct.unpack_from("<6I", payload, 0)
         # 손상/이형 방어 — 종이 크기로 말이 되는 값만 채택 (1~50 inch).
         if 7200 <= w <= 360000 and 7200 <= h <= 360000:
+            if len(payload) >= 40 and struct.unpack_from("<I", payload, 36)[0] & 0x1:
+                w, h = h, w
             pd.width, pd.height = w, h
             pd.left, pd.right, pd.top, pd.bottom = left, right, top, bottom
     return pd
@@ -508,6 +785,10 @@ def _interpret_table(ctrl: _Node) -> Optional[_Table]:
                 rows, cols = struct.unpack_from("<HH", child.payload, 4)
                 if 0 < rows <= 2000 and 0 < cols <= 256:
                     table.rows, table.cols = rows, cols
+                    # 표 74: 속성4 + 행2 + 열2 + 셀간격2 + 안쪽여백8 + 행크기 2×행 → BorderFill ID
+                    off = 18 + 2 * rows
+                    if len(child.payload) >= off + 2:
+                        (table.borderfill_id,) = struct.unpack_from("<H", child.payload, off)
             seen_body = True
             i += 1
             continue
@@ -522,6 +803,10 @@ def _interpret_table(ctrl: _Node) -> Optional[_Table]:
                 table.cells.append(cell)
             else:
                 table.caption.extend(paras)
+                # 캡션 리스트(표 71) = 리스트 헤더 8B + 캡션 속성 UINT32(표 73).
+                if len(child.payload) >= 12:
+                    (cap,) = struct.unpack_from("<I", child.payload, 8)
+                    table.caption_side = ("left", "right", "top", "bottom")[cap & 0x3]
             continue
         i += 1
     if not table.rows or not table.cols:
@@ -573,9 +858,58 @@ def _interpret_gso(ctrl: _Node) -> List[object]:
     return out
 
 
+def _ctrl_list_paras(ctrl: _Node) -> List[_Para]:
+    """컨트롤 아래 문단 리스트(LIST_HEADER + 형제 문단)들의 문단."""
+    out: List[_Para] = []
+    kids = ctrl.children
+    i = 0
+    while i < len(kids):
+        if kids[i].tagid == TAG_LIST_HEADER:
+            para_nodes, i = _list_paras(kids, i)
+            out.extend(p for p in _interpret_paras(para_nodes) if isinstance(p, _Para))
+            continue
+        i += 1
+    return out
+
+
+def _interpret_note(ctrl: _Node, kind: str) -> _Note:
+    note = _Note(kind=kind, paras=_ctrl_list_paras(ctrl))
+    # 내용 첫 자동 번호(각주 1 / 미주 2)가 이 주석의 번호다.
+    for node in _find_records(ctrl.children, TAG_CTRL_HEADER):
+        if _chid_of(node.payload) == "atno":
+            got = _atno(node.payload)
+            if got and got[0] in (1, 2) and got[1]:
+                note.number = got[1]
+                break
+    return note
+
+
+def _interpret_ctrl(ctrl: _Node) -> List[object]:
+    """문단에 붙는 컨트롤 하나 → 첨부(표/그림/글상자/주석) 목록."""
+    chid = _chid_of(ctrl.payload)
+    items: List[object] = []
+    if chid == "tbl ":
+        table = _interpret_table(ctrl)
+        if table is not None:
+            items.append(table)
+    elif chid == "gso ":
+        items.extend(_interpret_gso(ctrl))
+    elif chid in ("fn  ", "en  "):
+        items.append(_interpret_note(ctrl, chid.strip()))
+    if chid in ("tbl ", "gso "):
+        inline = _obj_inline(ctrl.payload)
+        for item in items:
+            item.inline = inline
+    return items
+
+
 def _interpret_paras(nodes: List[_Node]) -> List[object]:
-    """PARA_HEADER 노드 목록 → [_Para] — 표/그림/글상자는 앵커 문단의
+    """PARA_HEADER 노드 목록 → [_Para] — 표/그림/글상자/주석은 앵커 문단의
     attachments 로 붙는다 (본문 흐름상 그 문단 위치에서 등장).
+
+    확장 컨트롤은 텍스트 안 자리와 CTRL_HEADER 레코드를 ctrl id 로 짝지어
+    첨부마다 ``pos`` 를 매긴다. 자동 번호·덧말·글자 겹침은 그 자리에 글자로
+    들어간다.
 
     규격상 컨트롤은 앵커 문단의 자식이지만, 최상위에 직접 놓인 CTRL_HEADER
     (이형/편집기 산출물)도 빈 앵커 문단으로 감싸 받아들인다.
@@ -583,14 +917,8 @@ def _interpret_paras(nodes: List[_Node]) -> List[object]:
     out: List[object] = []
     for node in nodes:
         if node.tagid == TAG_CTRL_HEADER:
-            chid = _chid_of(node.payload)
             holder = _Para()
-            if chid == "tbl ":
-                table = _interpret_table(node)
-                if table is not None:
-                    holder.attachments.append(table)
-            elif chid == "gso ":
-                holder.attachments.extend(_interpret_gso(node))
+            holder.attachments.extend(_interpret_ctrl(node))
             if holder.attachments:
                 out.append(holder)
             continue
@@ -599,23 +927,46 @@ def _interpret_paras(nodes: List[_Node]) -> List[object]:
         para = _Para()
         if len(node.payload) >= 10:
             (para.parashape_id,) = struct.unpack_from("<H", node.payload, 8)
+        ctrls = [c for c in node.children if c.tagid == TAG_CTRL_HEADER]
+        ctrl_ids = [c.payload[:4] for c in ctrls]
+        inserts = {k: t for k, c in enumerate(ctrls) if (t := _ctrl_text(c.payload))}
+        raw = b"".join(c.payload for c in node.children if c.tagid == TAG_PARA_TEXT)
+        ctrl_pos: Dict[int, int] = {}
+        if raw:
+            para.text, para.raw_map, ctrl_pos = _parse_text(raw, ctrl_ids, inserts)
         for child in node.children:
-            if child.tagid == TAG_PARA_TEXT:
-                para.text += _parse_text_chunks(child.payload)
-            elif child.tagid == TAG_PARA_CHAR_SHAPE:
+            if child.tagid == TAG_PARA_CHAR_SHAPE:
                 for off in range(0, len(child.payload) - 7, 8):
                     pos, shape_id = struct.unpack_from("<II", child.payload, off)
                     para.shape_spans.append((pos, shape_id))
-            elif child.tagid == TAG_CTRL_HEADER:
-                chid = _chid_of(child.payload)
-                if chid == "tbl ":
-                    table = _interpret_table(child)
-                    if table is not None:
-                        para.attachments.append(table)
-                elif chid == "gso ":
-                    para.attachments.extend(_interpret_gso(child))
+        for k, ctrl in enumerate(ctrls):
+            for item in _interpret_ctrl(ctrl):
+                item.pos = ctrl_pos.get(k, len(para.text))
+                para.attachments.append(item)
+        # 컨트롤 없이 문단에 바로 달린 문단 리스트(실파일 이형 — LIST_HEADER 와
+        # 형제 문단이 문단의 자식) — 안의 표·그림까지 문단 뒤 내용으로 살린다.
+        nested = _ctrl_list_paras(node) + [
+            p for p in _interpret_paras(
+                [c for c in node.children if c.tagid == TAG_PARA_HEADER
+                 and not _claimed_by_list(node.children, c)])
+            if isinstance(p, _Para)]
+        if nested:
+            para.attachments.append(_TextBox(nested, pos=len(para.text)))
         out.append(para)
     return out
+
+
+def _claimed_by_list(kids: List[_Node], para_node: _Node) -> bool:
+    """``para_node`` 가 앞선 LIST_HEADER 의 형제 문단(그 리스트 소속)인가."""
+    i = 0
+    while i < len(kids):
+        if kids[i].tagid == TAG_LIST_HEADER:
+            para_nodes, i = _list_paras(kids, i)
+            if any(p is para_node for p in para_nodes):
+                return True
+            continue
+        i += 1
+    return False
 
 
 def _find_records(nodes: List[_Node], tagid: int):
@@ -624,6 +975,20 @@ def _find_records(nodes: List[_Node], tagid: int):
         if node.tagid == tagid:
             yield node
         yield from _find_records(node.children, tagid)
+
+
+def _master_page_paras(roots: List[_Node]) -> List[_Para]:
+    """구역 정의('secd') 아래 바탕쪽 문단 리스트의 문단들 (스펙 표 129/137)."""
+    for root in roots:
+        for ctrl in root.children:
+            if ctrl.tagid == TAG_CTRL_HEADER and _chid_of(ctrl.payload) == "secd":
+                kids = ctrl.children
+                for i, kid in enumerate(kids):
+                    if kid.tagid == TAG_LIST_HEADER:
+                        # 첫 바탕쪽(양쪽/홀수)만 — 홀·짝 변형을 겹쳐 쌓지 않는다.
+                        para_nodes, _ = _list_paras(kids, i)
+                        return [p for p in _interpret_paras(para_nodes) if isinstance(p, _Para)]
+    return []
 
 
 def _header_footer_paras(roots: List[_Node]) -> Tuple[List[_Para], List[_Para]]:
@@ -637,79 +1002,209 @@ def _header_footer_paras(roots: List[_Node]) -> Tuple[List[_Para], List[_Para]]:
         target = header if chid == "head" else footer
         if target:
             continue  # 첫 정의만
-        kids = ctrl.children
-        i = 0
-        while i < len(kids):
-            if kids[i].tagid == TAG_LIST_HEADER:
-                para_nodes, i = _list_paras(kids, i)
-                target.extend(p for p in _interpret_paras(para_nodes)
-                              if isinstance(p, _Para))
-                continue
-            i += 1
+        target.extend(_ctrl_list_paras(ctrl))
     return header, footer
 
 
-# ── DOCX 조립 ──────────────────────────────────────────────────
+# ── 배포용 문서 ────────────────────────────────────────────────
+#
+# 한컴 공개 스펙 「글 문서 파일 형식 – 배포용 문서」 revision 1.2 §2:
+# ViewText/Section* 스트림은 "배포용 문서 데이터" 레코드(256B)로 시작하고,
+# 나머지가 AES-128 ECB 로 암호화돼 있다. 키는 그 256B 에서 나온다 —
+# 첫 4바이트 seed 로 MS Visual C srand()/rand() 난수 배열(값 A = rand()&0xFF,
+# 횟수 B = (rand()&0x0F)+1 을 번갈아)을 만들어 XOR 하고, (seed & 0x0F) + 4
+# 위치의 80바이트(SHA1 해시코드) 중 앞 16바이트가 키, 그 다음 2바이트가
+# 옵션(0x01 복사 방지, 0x02 인쇄 방지)이다.
+
+_TAG_DISTRIBUTE_DOC_DATA = _TAG_BEGIN + 12  # 0x1C
 
 
-def hwp_to_docx(content: bytes) -> bytes:
-    import olefile
-    from docx import Document
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.oxml import OxmlElement
-    from docx.oxml.ns import qn
-    from docx.shared import Emu, Pt, RGBColor
+def _msvc_rand(seed: int):
+    state = seed & 0xFFFFFFFF
+    while True:
+        state = (state * 214013 + 2531011) & 0xFFFFFFFF
+        yield (state >> 16) & 0x7FFF
 
-    if not olefile.isOleFile(io.BytesIO(content)):
-        raise LegacyConvertError("hwp 가 아닙니다 (OLE 복합문서 아님)")
-    ole = olefile.OleFileIO(io.BytesIO(content))
+
+def _distribution_key(data: bytes) -> Tuple[bytes, int]:
+    """배포용 문서 데이터 256B → (AES-128 키, 옵션 플래그)."""
+    (seed,) = struct.unpack_from("<I", data, 0)
+    rand = _msvc_rand(seed)
+    pattern = bytearray()
+    while len(pattern) < 256:
+        value = next(rand) & 0xFF
+        count = (next(rand) & 0x0F) + 1
+        pattern.extend([value] * count)
+    merged = bytes(a ^ b for a, b in zip(data[:256], pattern[:256], strict=True))
+    offset = (seed & 0x0F) + 4
+    (options,) = struct.unpack_from("<H", merged, offset + 80)
+    return merged[offset:offset + 16], options
+
+
+def _decrypt_view_text(raw: bytes) -> Tuple[bytes, int]:
+    """ViewText 스트림 → (복호화된 본문 바이트, 옵션 플래그)."""
+    if len(raw) < 4:
+        raise LegacyConvertError("배포용 hwp 본문이 비어 있습니다")
+    (hdr,) = struct.unpack_from("<I", raw, 0)
+    tagid, size, pos = hdr & 0x3FF, (hdr >> 20) & 0xFFF, 4
+    if size == 0xFFF and len(raw) >= 8:
+        (size,) = struct.unpack_from("<I", raw, 4)
+        pos = 8
+    if tagid != _TAG_DISTRIBUTE_DOC_DATA or size < 256 or pos + size > len(raw):
+        raise LegacyConvertError("배포용 hwp 의 배포용 문서 데이터가 없습니다")
+    key, options = _distribution_key(raw[pos:pos + 256])
+    body = raw[pos + size:]
+    body = body[:len(body) - len(body) % 16]
     try:
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    except ImportError as exc:  # pragma: no cover — 의존성으로 선언돼 있다
+        raise LegacyConvertError("배포용 hwp 를 열려면 cryptography 가 필요합니다") from exc
+    decryptor = Cipher(algorithms.AES(key), modes.ECB()).decryptor()
+    return decryptor.update(body) + decryptor.finalize(), options
+
+
+# ── 파일 열기 ──────────────────────────────────────────────────
+
+
+class HwpFile:
+    """열린 HWP 5.0 — 헤더 검사, DocInfo, 본문 구역 트리, BinData.
+
+    DOCX 조립(:func:`hwp_to_docx`)과 HTML 렌더(``hwp_html``)가 같은 해석을
+    쓴다. ``with HwpFile(content) as hf:`` 로 쓰고, 열 수 없는 파일은 생성
+    시점에 :class:`LegacyConvertError` 로 거부한다 (암호·DRM·인증서 암호화).
+    배포용 문서는 공개 스펙대로 풀어서 읽는다 — ``copy_protected`` /
+    ``print_protected`` 가 그 문서의 제한 설정이다.
+    """
+
+    def __init__(self, content: bytes):
+        import olefile
+
+        if not olefile.isOleFile(io.BytesIO(content)):
+            raise LegacyConvertError("hwp 가 아닙니다 (OLE 복합문서 아님)")
+        try:
+            self._ole = olefile.OleFileIO(io.BytesIO(content))
+        except Exception as exc:  # noqa: BLE001 — 깨진 복합문서
+            raise LegacyConvertError(f"hwp 복합문서를 열 수 없습니다: {exc}") from exc
+        try:
+            self._open()
+        except BaseException:
+            self._ole.close()
+            raise
+
+    def _open(self) -> None:
+        ole = self._ole
         if not ole.exists("FileHeader"):
             raise LegacyConvertError("hwp FileHeader 스트림이 없습니다")
         header = ole.openstream("FileHeader").read()
         if not header.startswith(b"HWP Document File"):
             raise LegacyConvertError("hwp 시그니처가 아닙니다")
         (flags,) = struct.unpack_from("<I", header, 36)
-        compressed = bool(flags & 0x1)
+        # 파일 인식 정보 속성(스펙 표 3): bit0 압축, bit1 암호, bit2 배포용,
+        # bit4 DRM 보안, bit8 공인 인증서 암호화, bit10 공인 인증서 DRM.
+        self.compressed = bool(flags & 0x1)
+        self.distribution = bool(flags & 0x4)
+        self.copy_protected = False
+        self.print_protected = False
         if flags & 0x2:
             raise LegacyConvertError("암호로 보호된 hwp 는 열 수 없습니다")
-        if flags & 0x4:
-            raise LegacyConvertError("배포용(암호화) hwp 는 열 수 없습니다")
+        if flags & (0x10 | 0x400):
+            raise LegacyConvertError("DRM 으로 보호된 hwp 는 열 수 없습니다")
+        if flags & 0x100:
+            raise LegacyConvertError("공인 인증서로 암호화된 hwp 는 열 수 없습니다")
 
-        def read_stream(name: str) -> bytes:
-            raw = ole.openstream(name).read()
-            return _decompress(raw) if compressed else raw
+        self.info = _parse_doc_info(self.read_stream("DocInfo")) \
+            if ole.exists("DocInfo") else _DocInfo()
 
-        info = _parse_doc_info(read_stream("DocInfo")) if ole.exists("DocInfo") \
-            else _DocInfo()
-
-        def bin_blob(bindata_id: int) -> Optional[Tuple[bytes, str]]:
-            """PictureInfo.bindata_id(1-based) → (원본 바이트, 확장자)."""
-            if not (1 <= bindata_id <= len(info.bin_data)):
-                return None
-            entry = info.bin_data[bindata_id - 1]
-            if entry is None:
-                return None
-            storage_id, ext = entry
-            if ext not in _DOCX_IMAGE_EXTS:
-                return None
-            name = f"BinData/BIN{storage_id:04X}.{ext}"
-            try:
-                if not ole.exists(name):
-                    return None
-                return read_stream(name), ext
-            except Exception:  # noqa: BLE001 — 깨진 이미지는 건너뛴다
-                return None
-
-        # BodyText/Section* — 숫자 순
-        section_names = sorted(
+        # BodyText/Section* (배포용은 ViewText/Section*) — 숫자 순
+        body = "ViewText" if self.distribution else "BodyText"
+        self.section_names = sorted(
             ("/".join(entry) for entry in ole.listdir()
-             if len(entry) == 2 and entry[0] == "BodyText"
+             if len(entry) == 2 and entry[0] == body
              and entry[1].startswith("Section")),
             key=lambda s: int(re.sub(r"\D", "", s) or 0),
         )
-        if not section_names:
-            raise LegacyConvertError("hwp 본문(BodyText/Section*)이 없습니다")
+        if not self.section_names:
+            raise LegacyConvertError(f"hwp 본문({body}/Section*)이 없습니다")
+
+    def read_stream(self, name: str) -> bytes:
+        raw = self._ole.openstream(name).read()
+        return _decompress(raw) if self.compressed else raw
+
+    def read_section(self, name: str) -> bytes:
+        """본문 구역 스트림 — 배포용이면 복호화한 뒤 압축을 푼다."""
+        if not self.distribution:
+            return self.read_stream(name)
+        plain, options = _decrypt_view_text(self._ole.openstream(name).read())
+        self.copy_protected = self.copy_protected or bool(options & 0x1)
+        self.print_protected = self.print_protected or bool(options & 0x2)
+        return _decompress(plain) if self.compressed else plain
+
+    def sections(self):
+        """구역별 레코드 트리 (Section0, Section1, …)."""
+        for name in self.section_names:
+            yield _build_tree(self.read_section(name))
+
+    def bin_blob(self, bindata_id: int,
+                 exts=_DOCX_IMAGE_EXTS) -> Optional[Tuple[bytes, str]]:
+        """PictureInfo.bindata_id(1-based) → (원본 바이트, 확장자).
+
+        링크형·``exts`` 밖 형식·없거나 깨진 스트림은 None — 그림 하나 때문에
+        문서 전체를 버리지 않는다.
+        """
+        info = self.info
+        if not (1 <= bindata_id <= len(info.bin_data)):
+            return None
+        entry = info.bin_data[bindata_id - 1]
+        if entry is None:
+            return None
+        storage_id, ext, compressed = entry
+        if ext not in exts:
+            return None
+        name = f"BinData/BIN{storage_id:04X}.{ext}"
+        try:
+            if not self._ole.exists(name):
+                return None
+            raw = self._ole.openstream(name).read()
+            if not (self.compressed if compressed is None else compressed):
+                return raw, ext
+            try:
+                return _decompress(raw), ext
+            except LegacyConvertError:
+                # 압축 표시와 달리 날것으로 저장된 그림 — 시그니처로 알아본다.
+                return (raw, ext) if raw.startswith(_IMAGE_MAGIC) else None
+        except Exception:  # noqa: BLE001 — 깨진 이미지는 건너뛴다
+            return None
+
+    def close(self) -> None:
+        self._ole.close()
+
+    def __enter__(self) -> HwpFile:
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
+
+
+def first_page_def(roots: List[_Node]) -> Optional[_PageDef]:
+    """구역 트리의 첫 PAGE_DEF (없으면 None)."""
+    for pd_node in _find_records(roots, TAG_PAGE_DEF):
+        return _parse_page_def(pd_node.payload)
+    return None
+
+
+# ── DOCX 조립 ──────────────────────────────────────────────────
+
+
+def hwp_to_docx(content: bytes) -> bytes:
+    from docx import Document
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.shared import Emu, Pt, RGBColor
+
+    with HwpFile(content) as hf:
+        info = hf.info
+        bin_blob = hf.bin_blob
 
         doc = Document()
         page_applied = False
@@ -719,6 +1214,7 @@ def hwp_to_docx(content: bytes) -> bytes:
             "center": WD_ALIGN_PARAGRAPH.CENTER,
             "right": WD_ALIGN_PARAGRAPH.RIGHT,
             "justify": WD_ALIGN_PARAGRAPH.JUSTIFY,
+            "distribute": WD_ALIGN_PARAGRAPH.DISTRIBUTE,
         }
 
         def shape_of(idx: int) -> Optional[_CharShape]:
@@ -744,17 +1240,17 @@ def hwp_to_docx(content: bytes) -> bytes:
                 pf.space_before = Pt(pp.space_before_pt)
             if pp.space_after_pt > 0.05:
                 pf.space_after = Pt(pp.space_after_pt)
+            # 내어쓰기(-)는 첫 줄이 왼쪽 여백에 서고 나머지가 들어간다.
+            left = pp.left_pt + max(0.0, -pp.indent_pt)
+            if left > 0.05:
+                pf.left_indent = Pt(left)
+            if pp.right_pt > 0.05:
+                pf.right_indent = Pt(pp.right_pt)
+            if abs(pp.indent_pt) > 0.05:
+                pf.first_line_indent = Pt(pp.indent_pt)
 
         def emit_runs(para_obj, para: _Para) -> None:
-            text = para.text
-            if not text:
-                return
-            spans = sorted(para.shape_spans) or [(0, -1)]
-            for i, (start, shape_id) in enumerate(spans):
-                end = spans[i + 1][0] if i + 1 < len(spans) else len(text)
-                chunk = text[start:end]
-                if not chunk:
-                    continue
+            for chunk, shape_id in _para_runs(para):
                 st = shape_of(shape_id)
                 # 줄바꿈은 run break 로 — 문단은 유지된다.
                 pieces = chunk.split("\n")
@@ -774,6 +1270,10 @@ def hwp_to_docx(content: bytes) -> bytes:
                             run.underline = True
                         if st.strike:
                             run.font.strike = True
+                        if st.superscript:
+                            run.font.superscript = True
+                        elif st.subscript:
+                            run.font.subscript = True
                         if st.color:
                             run.font.color.rgb = RGBColor.from_string(st.color)
                         name = face_name(st.face_id)
@@ -954,14 +1454,15 @@ def hwp_to_docx(content: bytes) -> bytes:
                             else container_cell.add_paragraph()
                         apply_align(p, tb_para)
                         emit_runs(p, tb_para)
+                        # 글상자 안의 표·그림도 버리지 않는다.
+                        emit_attachments(tb_para, container_cell=container_cell)
 
         header_done = False
-        for sec_name in section_names:
-            roots = _build_tree(read_stream(sec_name))
+        for roots in hf.sections():
 
             if not page_applied:
-                for pd_node in _find_records(roots, TAG_PAGE_DEF):
-                    page = _parse_page_def(pd_node.payload)
+                page = first_page_def(roots)
+                if page is not None:
                     sec = doc.sections[0]
                     sec.page_width = Emu(_hu_to_emu(page.width))
                     sec.page_height = Emu(_hu_to_emu(page.height))
@@ -970,7 +1471,6 @@ def hwp_to_docx(content: bytes) -> bytes:
                     sec.top_margin = Emu(_hu_to_emu(page.top))
                     sec.bottom_margin = Emu(_hu_to_emu(page.bottom))
                     page_applied = True
-                    break
 
             if not header_done:
                 h_paras, f_paras = _header_footer_paras(roots)
@@ -997,5 +1497,3 @@ def hwp_to_docx(content: bytes) -> bytes:
         buf = io.BytesIO()
         doc.save(buf)
         return buf.getvalue()
-    finally:
-        ole.close()

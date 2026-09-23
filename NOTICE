@@ -9,5 +9,10 @@ licensed under the MIT License. The portions derived from ppt-master live
 under src/xgen_edit2docs/core/ and retain their original MIT terms — see
 LICENSE.ppt-master.MIT for the full text.
 
+The HWP readers (src/xgen_edit2docs/documents/legacy/hwp_convert.py,
+hwp_html.py) are written from Hancom's published format documents
+(한글 문서 파일 형식 5.0 revision 1.3, 배포용 문서 revision 1.2).
+본 제품은 한글과컴퓨터의 글 문서 파일(.hwp) 공개 문서를 참고하여 개발하였습니다.
+
 The PPTX pipeline lineage passes through edit2ppt
 (https://github.com/CocoRoF/edit2ppt), by the same author as this project.

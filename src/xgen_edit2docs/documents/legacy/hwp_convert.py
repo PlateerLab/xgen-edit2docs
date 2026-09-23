@@ -437,10 +437,19 @@ class _Node:
 # ── 저수준 파서 ────────────────────────────────────────────────
 
 
+#: 스트림 하나의 레코드 수 상한. 실문서 최대는 수만 개(한컴 스펙 문서 2.6만) — 작은
+#: 레코드를 수천만 개 늘어놓은 파일이 레코드 객체만으로 서버 메모리를 먹지 않게 한다.
+_MAX_RECORDS = 2_000_000
+
+
 def _iter_records(data: bytes):
     """(tagid, level, payload) 를 순서대로 — 손상 시 그 지점에서 멈춘다."""
     pos, n = 0, len(data)
+    count, limit = 0, _MAX_RECORDS
     while pos + 4 <= n:
+        count += 1
+        if count > limit:
+            raise LegacyConvertError("hwp 레코드가 너무 많습니다 (상한 초과)")
         (hdr,) = struct.unpack_from("<I", data, pos)
         pos += 4
         tagid = hdr & 0x3FF
@@ -1041,8 +1050,8 @@ def _distribution_key(data: bytes) -> Tuple[bytes, int]:
     return merged[offset:offset + 16], options
 
 
-def _decrypt_view_text(raw: bytes) -> Tuple[bytes, int]:
-    """ViewText 스트림 → (복호화된 본문 바이트, 옵션 플래그)."""
+def _distribution_record(raw: bytes) -> Tuple[bytes, int]:
+    """ViewText 스트림 앞의 배포용 문서 데이터 레코드 → (256B, 암호문 시작 위치)."""
     if len(raw) < 4:
         raise LegacyConvertError("배포용 hwp 본문이 비어 있습니다")
     (hdr,) = struct.unpack_from("<I", raw, 0)
@@ -1052,8 +1061,14 @@ def _decrypt_view_text(raw: bytes) -> Tuple[bytes, int]:
         pos = 8
     if tagid != _TAG_DISTRIBUTE_DOC_DATA or size < 256 or pos + size > len(raw):
         raise LegacyConvertError("배포용 hwp 의 배포용 문서 데이터가 없습니다")
-    key, options = _distribution_key(raw[pos:pos + 256])
-    body = raw[pos + size:]
+    return raw[pos:pos + 256], pos + size
+
+
+def _decrypt_view_text(raw: bytes) -> Tuple[bytes, int]:
+    """ViewText 스트림 → (복호화된 본문 바이트, 옵션 플래그)."""
+    data, start = _distribution_record(raw)
+    key, options = _distribution_key(data)
+    body = raw[start:]
     body = body[:len(body) - len(body) % 16]
     try:
         from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -1125,6 +1140,15 @@ class HwpFile:
         )
         if not self.section_names:
             raise LegacyConvertError(f"hwp 본문({body}/Section*)이 없습니다")
+
+        if self.distribution:
+            # 복사·인쇄 방지는 여는 순간 안다 — 본문을 풀기 전에 쓰임새를 정할 수 있게.
+            # (옵션은 배포용 문서 데이터 256B 에 있어 복호화가 필요 없다.)
+            for name in self.section_names:
+                head = ole.openstream(name).read(8 + 256)
+                _, options = _distribution_key(_distribution_record(head)[0])
+                self.copy_protected = self.copy_protected or bool(options & 0x1)
+                self.print_protected = self.print_protected or bool(options & 0x2)
 
     def read_stream(self, name: str) -> bytes:
         raw = self._ole.openstream(name).read()
@@ -1203,6 +1227,10 @@ def hwp_to_docx(content: bytes) -> bytes:
     from docx.shared import Emu, Pt, RGBColor
 
     with HwpFile(content) as hf:
+        if hf.copy_protected:
+            # 배포용 문서의 복사 방지 — DOCX 는 글자를 꺼내 쓰는 길(편집·에이전트 읽기)이다.
+            # 보기는 hwp_html 이 한다(선택·인쇄를 막은 채로).
+            raise LegacyConvertError("복사가 금지된 배포용 hwp 는 변환하지 않습니다")
         info = hf.info
         bin_blob = hf.bin_blob
 

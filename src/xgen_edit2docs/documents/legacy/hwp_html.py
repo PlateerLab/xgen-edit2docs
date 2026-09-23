@@ -138,14 +138,11 @@ class _Renderer:
     def render(self) -> str:
         out: list[str] = []
         page = _PageDef()
-        header: list[_Para] = []
-        footer: list[_Para] = []
         for roots in self.hf.sections():
             page = first_page_def(roots) or page
-            # 머리말·꼬리말은 구역마다 — 새로 정하지 않은 구역은 앞 구역 것을 잇는다.
-            h, f = _header_footer_paras(roots)
-            header = h or header
-            footer = f or footer
+            # 머리말·꼬리말은 그 구역이 새로 정했을 때만 그린다 — 앞 구역 것을 잇는
+            # 구역마다 되풀이하면 같은 머리말(과 그림)이 구역 수만큼 쌓인다.
+            header, footer = _header_footer_paras(roots)
             body = "".join(self._blocks(_interpret_paras(roots)))
             master = _master_page_paras(roots)
             if master:  # 바탕쪽(쪽 머리 장식·틀)은 구역 맨 위에 흐리게

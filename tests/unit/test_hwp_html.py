@@ -213,6 +213,13 @@ class TestStreams:
         with pytest.raises(LegacyConvertError, match="너무 큽니다"):
             hwp_to_html(_hwp(_para(0, _utf16("가" * 200))))
 
+    def test_too_many_records_are_refused(self, monkeypatch):
+        """레코드 객체만으로 메모리를 먹는 파일 — 상한에서 멈춘다(실문서 최대 2.6만)."""
+        monkeypatch.setattr(H, "_MAX_RECORDS", 5)
+        section = b"".join(_para(0, _utf16(f"문단{i}")) for i in range(5))
+        with pytest.raises(LegacyConvertError, match="레코드가 너무 많습니다"):
+            hwp_to_html(_hwp(section))
+
     def test_drm_documents_are_refused_by_name(self):
         with pytest.raises(LegacyConvertError, match="DRM"):
             hwp_to_html(_hwp(_para(0, _utf16("x")), flags=0x1 | 0x10))
@@ -267,6 +274,22 @@ class TestDistributionDocuments:
         assert "user-select:none" in html
         assert f"@media print{{.{ROOT_CLASS}{{display:none;}}}}" in html
 
+    def test_protection_is_known_when_the_file_opens(self):
+        with H.HwpFile(self._doc(options=0x1)) as hf:
+            assert hf.copy_protected and not hf.print_protected
+
+    def test_copy_protected_text_is_not_handed_out_as_docx(self):
+        """DOCX 는 글자를 꺼내 쓰는 길(편집·에이전트 읽기) — 복사 방지 문서는 보기만."""
+        with pytest.raises(LegacyConvertError, match="복사가 금지된"):
+            convert_to_ooxml(self._doc(options=0x1), "hwp")
+        assert "배포용 본문" in _text_of(hwp_to_html(self._doc(options=0x1)))
+
+    def test_an_unprotected_distribution_document_converts(self):
+        from docx import Document
+
+        d = Document(io.BytesIO(convert_to_ooxml(self._doc(options=0), "hwp")[0]))
+        assert any("배포용 본문" in p.text for p in d.paragraphs)
+
 
 # ─────────────────────────────────────────────────────────────
 # HTML — 충실도와 안전
@@ -299,6 +322,16 @@ class TestFidelity:
         html = hwp_to_html(_hwp(_para(0, _utf16("o 내어쓰기 문단")), docinfo))
         assert "margin-left:15pt" in html and "text-indent:-5pt" in html
         assert "word-break:keep-all" in html
+
+    def test_a_header_is_drawn_where_it_is_defined_not_per_section(self):
+        head = _ctrl(1, "head", b"\x00" * 8) + _rec(0x48, 2, struct.pack("<H", 1) + b"\x00" * 6) \
+            + _para(2, _utf16("머리말 한 번"))
+        first = _para(0, _ext(0x10, "head") + _utf16("첫 구역"), extra=head)
+        second = _para(0, _utf16("둘째 구역"))
+        doc = _hwp(first, extra={"BodyText/Section1": _comp(second)})
+        html = hwp_to_html(doc)
+        assert "둘째 구역" in html
+        assert html.count("머리말 한 번") == 1
 
     def test_table_border_fill_applies_to_the_table(self):
         bf = bytearray(44)

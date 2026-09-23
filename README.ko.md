@@ -89,7 +89,7 @@ generate_doc("Q3 영업 결과 임원 보고", output="deck.pptx", lang="ko-KR",
 template=None, deck_mode="new", pages=(8, 12), lang="en-US", model=...)` →
 `GenerateResult(path, page_count, design_spec, warnings)`.
 
-`sources`는 PDF / DOCX / DOC / PPTX / XLSX / HTML / EPUB / IPYNB 경로를 받아
+`sources`는 PDF / DOCX / DOC / PPTX / XLSX / HTML / IPYNB 경로를 받아
 마크다운으로 변환해 작성 LLM의 참고 자료로 전달합니다.
 
 ### 편집 — 채팅 1턴, 나머지는 바이트 동일

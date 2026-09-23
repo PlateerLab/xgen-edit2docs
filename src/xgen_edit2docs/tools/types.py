@@ -23,7 +23,7 @@ LangCode = Literal["ko-KR", "en-US", "zh-CN", "zh-TW", "ja-JP"]
 DEFAULT_LANG: LangCode = "en-US"
 
 # Source document formats the converters understand.
-SourceFormat = Literal["pdf", "docx", "doc", "pptx", "xlsx", "xlsm", "html", "epub", "ipynb", "url"]
+SourceFormat = Literal["pdf", "docx", "doc", "pptx", "xlsx", "xlsm", "html", "ipynb", "url"]
 
 # Slide canvas formats — keys match core.project_utils.CANVAS_FORMATS.
 CanvasFormat = Literal[

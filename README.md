@@ -91,7 +91,7 @@ Full signature: `generate_doc(intent, *, output, api_key=None, sources=None,
 template=None, deck_mode="new", pages=(8, 12), lang="en-US", model=...)` →
 `GenerateResult(path, page_count, design_spec, warnings)`.
 
-`sources` accepts PDF / DOCX / DOC / PPTX / XLSX / HTML / EPUB / IPYNB paths —
+`sources` accepts PDF / DOCX / DOC / PPTX / XLSX / HTML / IPYNB paths —
 each is converted to markdown and given to the writer as reference material.
 
 ### Edit — one chat turn, everything else byte-identical

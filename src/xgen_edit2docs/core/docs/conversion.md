@@ -43,7 +43,6 @@ Hybrid converter: pure-Python for the common formats, pandoc fallback for the re
 Native path (no external binary required):
 - `.docx` — via `mammoth`
 - `.html` / `.htm` — via `markdownify` + `beautifulsoup4`
-- `.epub` — via `ebooklib` + `markdownify`
 - `.ipynb` — via `nbconvert`
 
 Pandoc fallback (only if you need these):
@@ -52,7 +51,6 @@ Pandoc fallback (only if you need these):
 ```bash
 python3 scripts/source_to_md/doc_to_md.py lecture.docx
 python3 scripts/source_to_md/doc_to_md.py lecture.docx -o output.md
-python3 scripts/source_to_md/doc_to_md.py notes.epub
 python3 scripts/source_to_md/doc_to_md.py paper.tex -o paper.md  # uses pandoc
 ```
 
@@ -60,7 +58,7 @@ Dependencies:
 
 ```bash
 # Native path — always required
-pip install mammoth markdownify ebooklib nbconvert beautifulsoup4
+pip install mammoth markdownify nbconvert beautifulsoup4
 
 # Fallback path — only for .doc/.odt/.rtf/.tex/.rst/.org/.typ
 # macOS:   brew install pandoc

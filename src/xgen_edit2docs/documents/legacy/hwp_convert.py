@@ -1,8 +1,8 @@
 """HWP 5.0 (한글 바이너리) → DOCX 구조 보존 변환.
 
-HWP 5.0 은 OLE 복합문서다 (레퍼런스: 한컴 공개 스펙 白書 —
-reference_data/hwpml_3.0_spec.pdf 의 구조 의미 + pyhwp binmodel 의 바이트
-레이아웃, 표 번호는 한컴 스펙 기준):
+HWP 5.0 은 OLE 복합문서다 (레퍼런스: 한컴 공개 스펙 —
+「한글 문서 파일 형식 5.0」의 바이트 레이아웃 + reference_data/hwpml_3.0_spec.pdf
+의 구조 의미, 표 번호는 한컴 스펙 기준):
 
     FileHeader          32B 시그니처 + version + flags(bit0 압축, bit1 암호)
     DocInfo             레코드 스트림 — ID_MAPPINGS/FACE_NAME/BORDER_FILL/
@@ -18,7 +18,7 @@ reference_data/hwpml_3.0_spec.pdf 의 구조 의미 + pyhwp binmodel 의 바이�
 의미 단위(문단/표/그림/글상자/머리말)로 해석한다.
 
 본문 텍스트는 UTF-16LE 이되 0x00~0x1F 코드가 컨트롤 문자다 — 문자형(1워드)/
-인라인·확장형(8워드) 크기 표에 따라 건너뛴다 (pyhwp ControlChar 표와 동일).
+인라인·확장형(8워드) 크기 표에 따라 건너뛴다 (스펙 revision 1.3 표 6 제어 문자).
 
 충실도 범위:
 - 문단: 정렬(PARA_SHAPE align), 런 스타일(글꼴/크기/굵게/기울임/밑줄/
@@ -65,7 +65,8 @@ TAG_SHAPE_COMPONENT = _TAG_BEGIN + 60  # 0x4C
 TAG_TABLE = _TAG_BEGIN + 61            # 0x4D
 TAG_SHAPE_PICTURE = _TAG_BEGIN + 69    # 0x55
 
-#: 컨트롤 문자 크기 표 (pyhwp ControlChar 와 동일) — 코드 → 워드 수.
+#: 컨트롤 문자 크기 표 — 코드 → 워드 수 (스펙 revision 1.3 표 6:
+#: char 1워드, inline/extended 8워드).
 _CTRL_SIZES = {
     0x00: 1, 0x01: 8, 0x02: 8, 0x03: 8, 0x04: 8, 0x05: 8, 0x06: 8, 0x07: 8,
     0x08: 8, 0x09: 8, 0x0A: 1, 0x0B: 8, 0x0C: 8, 0x0D: 1, 0x0E: 8, 0x0F: 8,
@@ -196,7 +197,7 @@ def _parse_para_shape(payload: bytes) -> _ParaProps:
     return pp
 
 
-#: 표 21 테두리선 굵기 인덱스 → mm (pyhwp Border.widths)
+#: 표 21 테두리선 굵기 인덱스 → mm (스펙 revision 1.3 표 26 테두리선 굵기)
 _BORDER_WIDTH_MM = (0.1, 0.12, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5,
                     0.6, 0.7, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0)
 
@@ -467,7 +468,7 @@ def _list_paras(kids: List[_Node], i: int) -> Tuple[List[_Node], int]:
     """kids[i] (LIST_HEADER) 에 속한 문단 노드들과 다음 인덱스.
 
     **실파일에서 문단 리스트의 문단들은 LIST_HEADER 의 자식이 아니라 같은
-    레벨의 형제다** (표 60 문단 리스트 헤더 — pyhwp table.hwp 실측:
+    레벨의 형제다** (표 60 문단 리스트 헤더 — 실파일 실측:
     L2 LIST_HEADER 다음 L2 PARA_HEADER). 형제 수는 헤더의 paragraphs
     필드(UINT16 @0)가 상한이다. 자식으로 중첩된 이형(구버전 산출물)도
     함께 받아들인다.

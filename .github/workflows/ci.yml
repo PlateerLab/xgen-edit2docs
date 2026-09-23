@@ -22,7 +22,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      # 내부 의존(xgen-contextifier)은 pyproject 에 URL 직접참조로 박혀 있어
+      # 내부 의존(xgen-pdf)은 pyproject 에 URL 직접참조로 박혀 있어
       # 별도 인덱스 설정 없이 그대로 해석된다 — 우리 패키지는 PyPI 에 없다.
       - name: Install
         run: |

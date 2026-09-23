@@ -140,7 +140,7 @@ def _default_output(pptx: str | Path | bytes, suffix: str) -> Path:
 _SOURCE_TYPES = {
     ".pdf": "pdf", ".docx": "docx", ".doc": "doc", ".pptx": "pptx",
     ".xlsx": "xlsx", ".xlsm": "xlsm", ".html": "html", ".htm": "html",
-    ".epub": "epub", ".ipynb": "ipynb",
+    ".ipynb": "ipynb",
 }
 
 

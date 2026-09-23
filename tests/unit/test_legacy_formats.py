@@ -337,7 +337,7 @@ def make_hwp_rich() -> bytes:
 
     def cell(level: int, props: bytes, text: str) -> bytes:
         # 실파일 구조: 셀 문단은 LIST_HEADER 의 **형제**(같은 레벨)다
-        # (pyhwp table.hwp 실측 — L2 LIST_HEADER 다음 L2 PARA_HEADER).
+        # (실파일 실측 — L2 LIST_HEADER 다음 L2 PARA_HEADER).
         return b"".join([
             _rec(0x48, level, props),
             _rec(0x42, level, para_header(0)),

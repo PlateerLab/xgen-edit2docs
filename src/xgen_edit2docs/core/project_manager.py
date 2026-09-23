@@ -50,7 +50,6 @@ EXCEL_SUFFIXES = {".xlsx", ".xlsm"}
 LEGACY_EXCEL_SUFFIXES = {".xls"}
 DOC_SUFFIXES = {
     ".docx", ".doc", ".odt", ".rtf",          # Office documents
-    ".epub",                                    # eBooks
     ".html", ".htm",                            # Web pages
     ".tex", ".latex", ".rst", ".org",           # Academic / technical
     ".ipynb", ".typ",                           # Notebooks / Typst

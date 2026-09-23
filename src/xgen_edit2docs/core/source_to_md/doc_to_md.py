@@ -5,7 +5,6 @@ Document to Markdown Converter (hybrid Python + Pandoc fallback)
 Primary formats (pure Python, no external tools required):
     .docx   → mammoth (tables preserved; OMML equations rewritten to inline LaTeX)
     .html   → markdownify + BeautifulSoup
-    .epub   → ebooklib + markdownify
     .ipynb  → nbconvert
 
 Fallback formats (require pandoc installed):
@@ -38,7 +37,7 @@ from xml.etree import ElementTree as ET
 # ─────────────────────────────────────────────────────────────
 
 # Formats handled by pure-Python paths
-NATIVE_FORMATS = {".docx", ".html", ".htm", ".epub", ".ipynb"}
+NATIVE_FORMATS = {".docx", ".html", ".htm", ".ipynb"}
 
 # Formats handled by pandoc fallback: suffix → (pandoc input format, description)
 PANDOC_FORMATS = {
@@ -988,201 +987,6 @@ def _convert_html(input_file: Path, out_file: Path) -> str:
 
 
 # ─────────────────────────────────────────────────────────────
-# EPUB → Markdown (ebooklib + markdownify)
-# ─────────────────────────────────────────────────────────────
-
-def _sanitize_epub_manifest(src: Path) -> tuple[Path, bool]:
-    """Return an EPUB path that ebooklib can read.
-
-    Some EPUBs contain OPF manifest entries pointing at files that are missing
-    from the ZIP archive. ebooklib reads every manifest item eagerly, so one
-    stale entry can abort the whole conversion. When broken entries are found,
-    this writes a temporary EPUB with those manifest items and matching spine
-    refs removed.
-    """
-    OPF_NS = "http://www.idpf.org/2007/opf"
-    CONT_NS = "urn:oasis:names:tc:opendocument:xmlns:container"
-
-    try:
-        with zipfile.ZipFile(src, "r") as zin:
-            names = set(zin.namelist())
-            if "META-INF/container.xml" not in names:
-                return src, False
-
-            container_root = ET.fromstring(zin.read("META-INF/container.xml"))
-            rootfile_el = container_root.find(f".//{{{CONT_NS}}}rootfile")
-            if rootfile_el is None:
-                return src, False
-
-            opf_path = rootfile_el.get("full-path")
-            if not opf_path or opf_path not in names:
-                return src, False
-
-            opf_root = ET.fromstring(zin.read(opf_path))
-            manifest_el = opf_root.find(f"{{{OPF_NS}}}manifest")
-            if manifest_el is None:
-                return src, False
-
-            opf_dir = posixpath.dirname(opf_path)
-            bad_ids: list[str] = []
-            bad_hrefs: list[str] = []
-            for item_el in list(manifest_el.findall(f"{{{OPF_NS}}}item")):
-                href = item_el.get("href", "")
-                if not href:
-                    continue
-                rel = unquote(href)
-                zpath = posixpath.normpath(
-                    posixpath.join(opf_dir, rel) if opf_dir else rel
-                )
-                if zpath in names:
-                    continue
-
-                item_id = item_el.get("id", "")
-                if item_id:
-                    bad_ids.append(item_id)
-                bad_hrefs.append(href)
-                manifest_el.remove(item_el)
-
-            if not bad_hrefs:
-                return src, False
-
-            spine_el = opf_root.find(f"{{{OPF_NS}}}spine")
-            if spine_el is not None and bad_ids:
-                for itemref in list(spine_el.findall(f"{{{OPF_NS}}}itemref")):
-                    if itemref.get("idref") in bad_ids:
-                        spine_el.remove(itemref)
-
-            ET.register_namespace("", OPF_NS)
-            ET.register_namespace("dc", "http://purl.org/dc/elements/1.1/")
-            new_opf = ET.tostring(opf_root, encoding="utf-8", xml_declaration=True)
-
-            tmp = tempfile.NamedTemporaryFile(suffix=".epub", delete=False)
-            tmp.close()
-            out_path = Path(tmp.name)
-
-            with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zout:
-                if "mimetype" in names:
-                    zout.writestr(
-                        zipfile.ZipInfo("mimetype"),
-                        zin.read("mimetype"),
-                        compress_type=zipfile.ZIP_STORED,
-                    )
-                for name in zin.namelist():
-                    if name == "mimetype":
-                        continue
-                    if name == opf_path:
-                        zout.writestr(name, new_opf)
-                    else:
-                        zout.writestr(name, zin.read(name))
-
-            preview = ", ".join(bad_hrefs[:3])
-            if len(bad_hrefs) > 3:
-                preview += " ..."
-            print(
-                f"[INFO] EPUB manifest sanitized: removed "
-                f"{len(bad_hrefs)} broken item(s) [{preview}]"
-            )
-            return out_path, True
-    except (zipfile.BadZipFile, ET.ParseError, OSError) as exc:
-        print(
-            f"[WARN] EPUB sanitize skipped "
-            f"({exc.__class__.__name__}: {exc}); using original file"
-        )
-        return src, False
-
-
-def _epub_image_candidates(src: str, document_name: str) -> list[str]:
-    """Build lookup candidates for an image reference inside an EPUB document."""
-    parsed = urlparse(src)
-    raw_path = parsed.path if parsed.scheme else src
-    decoded_path = unquote(raw_path)
-    normalized_path = posixpath.normpath(decoded_path).lstrip("/")
-    document_dir = posixpath.dirname(document_name)
-    relative_path = posixpath.normpath(
-        posixpath.join(document_dir, decoded_path)
-    ).lstrip("/")
-
-    candidates = [
-        src,
-        raw_path,
-        decoded_path,
-        normalized_path,
-        relative_path,
-        Path(decoded_path).name,
-        Path(normalized_path).name,
-    ]
-    return [candidate for candidate in dict.fromkeys(candidates) if candidate]
-
-
-def _convert_epub(input_file: Path, out_file: Path) -> str:
-    try:
-        import ebooklib
-        from ebooklib import epub
-        from markdownify import markdownify
-        from bs4 import BeautifulSoup
-    except ImportError as e:
-        print(f"[ERROR] Missing dependency: {e.name}. "
-              f"Run: pip install ebooklib markdownify beautifulsoup4")
-        return ""
-
-    media_dir, rel_media_dir = _ensure_media_dir(out_file)
-    sanitized_path, is_temp_copy = _sanitize_epub_manifest(input_file)
-    try:
-        book = epub.read_epub(str(sanitized_path))
-    finally:
-        if is_temp_copy:
-            try:
-                sanitized_path.unlink()
-            except OSError:
-                pass
-
-    # Extract images, remembering original path → new filename mapping
-    img_map: dict[str, str] = {}
-    index = 0
-    for item in book.get_items_of_type(ebooklib.ITEM_IMAGE):
-        index += 1
-        ext = Path(item.file_name).suffix or ".bin"
-        filename = f"image_{index:03d}{ext}"
-        (media_dir / filename).write_bytes(item.get_content())
-        # Map both full and basename for robust lookup
-        img_map[item.file_name] = filename
-        img_map[Path(item.file_name).name] = filename
-
-    # Iterate document items in spine order
-    html_parts: list[str] = []
-    spine_ids = [sid for sid, _ in book.spine]
-    id_to_item = {it.get_id(): it for it in book.get_items_of_type(ebooklib.ITEM_DOCUMENT)}
-    for sid in spine_ids:
-        item = id_to_item.get(sid)
-        if item is None:
-            continue
-        soup = BeautifulSoup(item.get_content(), "html.parser")
-        for img in soup.find_all("img"):
-            src = img.get("src", "")
-            if not src:
-                continue
-            # Try exact match, basename, decoded path, and path relative to this XHTML file.
-            candidates = _epub_image_candidates(src, item.file_name)
-            resolved = next((img_map[c] for c in candidates if c in img_map), None)
-            if resolved:
-                img["src"] = f"{rel_media_dir}/{resolved}"
-        body = soup.find("body") or soup
-        html_parts.append(str(body))
-
-    combined_html = "\n\n".join(html_parts)
-    markdown = markdownify(combined_html, heading_style="ATX", bullets="-")
-    markdown = re.sub(r"\n{3,}", "\n\n", markdown).strip() + "\n"
-    out_file.write_text(markdown, encoding="utf-8")
-
-    if not any(media_dir.iterdir()):
-        media_dir.rmdir()
-        media_dir = None  # type: ignore[assignment]
-
-    _report_result(out_file, media_dir)
-    return markdown
-
-
-# ─────────────────────────────────────────────────────────────
 # IPYNB → Markdown (nbconvert)
 # ─────────────────────────────────────────────────────────────
 
@@ -1318,7 +1122,6 @@ _FORMAT_DESC = {
     ".docx":  "Microsoft Word (mammoth)",
     ".html":  "HTML (markdownify)",
     ".htm":   "HTML (markdownify)",
-    ".epub":  "EPUB (ebooklib)",
     ".ipynb": "Jupyter Notebook (nbconvert)",
 }
 
@@ -1346,8 +1149,6 @@ def convert_to_markdown(input_path: str, output_path: str | None = None) -> str:
             return _convert_docx(input_file, out_file)
         if suffix in (".html", ".htm"):
             return _convert_html(input_file, out_file)
-        if suffix == ".epub":
-            return _convert_epub(input_file, out_file)
         if suffix == ".ipynb":
             return _convert_ipynb(input_file, out_file)
 
@@ -1365,12 +1166,11 @@ def main() -> None:
 Examples:
   python doc_to_md.py lecture.docx                # Word → Markdown (mammoth)
   python doc_to_md.py article.html                # HTML → Markdown (markdownify)
-  python doc_to_md.py book.epub                   # EPUB → Markdown (ebooklib)
   python doc_to_md.py notebook.ipynb              # Jupyter → Markdown (nbconvert)
   python doc_to_md.py manuscript.tex              # LaTeX → Markdown (pandoc fallback)
 
 Native formats (no pandoc required):
-  .docx  .html/.htm  .epub  .ipynb
+  .docx  .html/.htm  .ipynb
 
 Pandoc fallback formats (require system pandoc):
   .doc  .odt  .rtf  .tex/.latex  .rst  .org  .typ

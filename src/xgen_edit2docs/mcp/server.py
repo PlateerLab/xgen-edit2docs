@@ -557,6 +557,9 @@ def build_mcp_server(context: MCPContext | None = None) -> FastMCP:
 
 
 def _infer_source_type(mime_type: str | None) -> str:
+    # EPUB 은 지원하지 않는다 — 모르는 형식은 pdf 로 떨어지므로 먼저 거부한다.
+    if mime_type == "application/epub+zip":
+        raise ValueError("EPUB sources are not supported")
     return {
         "application/pdf": "pdf",
         "application/msword": "doc",
@@ -565,7 +568,6 @@ def _infer_source_type(mime_type: str | None) -> str:
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
         "application/vnd.ms-excel.sheet.macroenabled.12": "xlsm",
         "text/html": "html",
-        "application/epub+zip": "epub",
         "application/x-ipynb+json": "ipynb",
     }.get(mime_type or "", "pdf")
 

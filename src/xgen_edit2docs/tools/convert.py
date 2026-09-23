@@ -33,7 +33,6 @@ _EXT_TO_FORMAT: dict[str, SourceFormat] = {
     ".pptx": "pptx",
     ".xlsx": "xlsx", ".xlsm": "xlsm",
     ".html": "html", ".htm": "html",
-    ".epub": "epub",
     ".ipynb": "ipynb",
 }
 
@@ -140,7 +139,7 @@ def _convert_bytes(content: bytes, fmt: SourceFormat, warnings: list[WarningEntr
         if fmt == "pdf":
             from ..core.source_to_md.pdf_to_md import extract_pdf_to_markdown
             extract_pdf_to_markdown(str(input_path), str(output_path), images="filtered")
-        elif fmt in {"docx", "doc", "html", "epub", "ipynb"}:
+        elif fmt in {"docx", "doc", "html", "ipynb"}:
             from ..core.source_to_md.doc_to_md import convert_to_markdown as _doc_convert
             _doc_convert(str(input_path), str(output_path))
         elif fmt == "pptx":
@@ -178,6 +177,5 @@ def _format_to_ext(fmt: SourceFormat) -> str:
         "pptx": ".pptx",
         "xlsx": ".xlsx", "xlsm": ".xlsm",
         "html": ".html",
-        "epub": ".epub",
         "ipynb": ".ipynb",
     }.get(fmt, "")

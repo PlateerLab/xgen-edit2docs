@@ -1,6 +1,6 @@
 [project]
 name = "xgen-edit2docs"
-version = "0.26.1"
+version = "0.26.2"
 description = "AI-agent-native document engine: generate and chat-edit DOCX, XLSX and PPTX as a Python library, agent tool set, MCP server or hosted service. English-first with first-class Korean support. Sister project of edit2ppt."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -24,54 +24,54 @@ classifiers = [
 # the tool layer (generate/edit/preview/text-edit) with zero server infra.
 # `pip install xgen_edit2docs` stays lean; the hosted service adds `[server]`.
 dependencies = [
-    "pydantic>=2.9.0",
-    "pydantic-settings>=2.6.0",
+    "pydantic==2.12.5",
+    "pydantic-settings==2.12.0",
     # i18n + spec_lock / edit-plan parsing
-    "pyyaml>=6.0",
+    "pyyaml==6.0.2",
     # Core engine dependencies (from ppt-master)
-    "python-pptx>=0.6.21",
-    "python-docx>=1.1.0",
+    "python-pptx==1.0.2",
+    "python-docx==1.2.0",
     # PDF engine: pdfium-based xgen-pdf (BSD/Apache). PyMuPDF (AGPL) is gone.
-    "xgen-pdf @ https://github.com/PlateerLab/xgen-pdf/releases/download/v0.1.1/xgen_pdf-0.1.1-py3-none-any.whl",
-    "mammoth>=1.6.0",
-    "openpyxl>=3.1.0",
+    "xgen-pdf @ https://github.com/PlateerLab/xgen-pdf/releases/download/v0.1.2/xgen_pdf-0.1.2-py3-none-any.whl",
+    "mammoth==1.13.0",
+    "openpyxl==3.1.5",
     # Lossless raw OOXML layer: vendored in xgen_edit2docs.raw (from xgen-contextifier 0.9.0),
     # so no dependency on that package (which would pull in PyMuPDF).
     # Native chart export (data-pptx-native markers) generates the chart's
     # embedded XLSX workbook with XlsxWriter (upstream 53c6cad5).
-    "XlsxWriter>=3.0",
-    "nbconvert>=7.0.0",
-    "markdownify>=0.11.6",
-    "beautifulsoup4>=4.12.0",
+    "XlsxWriter==3.2.9",
+    "nbconvert==7.17.1",
+    "markdownify==1.2.3",
+    "beautifulsoup4==4.15.0",
     # HWP/OLE containers (was an indirect dependency via xgen-contextifier).
-    "olefile>=0.47",
+    "olefile==0.47",
     # AES-128 for HWP distribution documents (배포용 문서, Hancom published spec).
-    "cryptography>=42",
-    "requests>=2.31.0",
-    "Pillow>=9.0.0",
-    "numpy>=1.20.0",
-    "lxml>=5.3.0",
+    "cryptography==46.0.7",
+    "requests==2.33.0",
+    "Pillow==12.3.0",
+    "numpy==2.3.2",
+    "lxml==6.1.3",
     # TTS
-    "edge-tts>=7.2.8",
+    "edge-tts==7.2.8",
     # LLM
-    "anthropic>=0.40.0",
+    "anthropic==0.125.0",
     # MCP (Model Context Protocol) — powers the zero-infra `xgen_edit2docs-mcp`
     # and the hosted MCP-over-HTTP transport. Capped below 2.0: the 2.0
     # major dropped the `mcp.server.fastmcp` module our server imports, so
     # an uncapped floor silently resolves the breaking release and the
     # server crash-loops on `ModuleNotFoundError: mcp.server.fastmcp`.
-    "mcp>=1.0.0,<2.0.0",
+    "mcp==1.30.0",
     # Native raster layer (docs/native-render-plan.md M1) — both are
     # self-contained wheels: resvg for SVG->PNG, fontTools for metrics.
-    "resvg-py>=0.3.3",
-    "fonttools>=4.50.0",
+    "resvg-py==0.5.0",
+    "fonttools==4.66.1",
 
     # ── 기능 extras 흡수 (XGEN 은 기능을 옵션으로 두지 않는다) ────────
     # images(AI 이미지 생성) · svg-fallback 은 라이브러리 기능이다.
     # 설치 시 [tag] 를 잊으면 조용히 없는 기능이 되므로 기본 포함한다.
-    "google-genai>=1.0.0",
-    "openai>=1.55.0",
-    "cairosvg>=2.7.0",
+    "google-genai==1.75.0",
+    "openai==2.54.0",
+    "cairosvg==2.9.1",
 ]
 
 [project.optional-dependencies]

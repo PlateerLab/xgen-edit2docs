@@ -1,6 +1,6 @@
 [project]
 name = "xgen-edit2docs"
-version = "0.26.3"
+version = "0.26.4"
 description = "AI-agent-native document engine: generate and chat-edit DOCX, XLSX and PPTX as a Python library, agent tool set, MCP server or hosted service. English-first with first-class Korean support. Sister project of edit2ppt."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -32,7 +32,7 @@ dependencies = [
     "python-pptx==1.0.2",
     "python-docx==1.2.0",
     # PDF engine: pdfium-based xgen-pdf (BSD/Apache). PyMuPDF (AGPL) is gone.
-    "xgen-pdf @ https://github.com/PlateerLab/xgen-pdf/releases/download/v0.1.2/xgen_pdf-0.1.2-py3-none-any.whl",
+    "xgen-pdf @ https://github.com/PlateerLab/xgen-pdf/releases/download/v0.1.3/xgen_pdf-0.1.3-py3-none-any.whl",
     "mammoth==1.13.0",
     "openpyxl==3.1.5",
     # Lossless raw OOXML layer: vendored in xgen_edit2docs.raw (from xgen-contextifier 0.9.0),
@@ -48,7 +48,7 @@ dependencies = [
     # AES-128 for HWP distribution documents (배포용 문서, Hancom published spec).
     "cryptography==50.0.1",
     "requests==2.33.0",
-    "Pillow==12.3.0",
+    "Pillow==13.0.0",
     "numpy==2.3.2",
     "lxml==6.1.3",
     # TTS
